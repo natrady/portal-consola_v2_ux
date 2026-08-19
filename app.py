@@ -185,8 +185,19 @@ if menu == "🗺️ Distribución":
                     st.success(f"Configuración lista: El 100% de los verificadores disponibles irán a {mod_todos}.")
                     
                     if st.button("💾 Guardar Estrategia Global", type="primary", use_container_width=True):
-                        st.success("✅ ¡Estrategia guardada correctamente!")
-                        st.info(f"**Mensaje sugerido:**\nBuenas tardes. La distribución para mañana es la siguiente: toda la plantilla a {mod_todos}.")
+                        estrategia = {
+                            "fecha": str(st.session_state.fecha_dist),
+                            "mensaje": f"Buenas tardes. La distribución para mañana es la siguiente: toda la plantilla a {mod_todos}.",
+                            "re": 0, "bb": 0, "ct": 0, "tch": 0, "4ch": 0, "resto": mod_todos
+                        }
+                        try:
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
+                            hoja_est.update_acell(1, 1, "Estrategia_JSON")
+                            hoja_est.update_acell(1, 2, json.dumps(estrategia))
+                            st.success("✅ ¡Estrategia guardada en la nube!")
+                            st.info(f"**Mensaje Oficial:**\n{estrategia['mensaje']}")
+                        except Exception as e:
+                            st.error(f"🚨 Error: Crea una pestaña llamada 'Estrategia' en tu Google Sheets. Detalle: {e}")
                     
                 else:
                     st.markdown("**Posiciones Fijas (No exceder el límite operativo):**")
@@ -240,11 +251,12 @@ if menu == "🗺️ Distribución":
                             "re": q_re, "bb": q_bb, "ct": q_ct, "tch": q_tch, "4ch": q_4ch, "resto": resto_a
                         }
                         try:
-                            with open("estrategia_admin.json", "w") as f:
-                                json.dump(estrategia, f)
-                            st.success("✅ ¡Estrategia y mensaje guardados correctamente!")
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
+                            hoja_est.update_acell(1, 1, "Estrategia_JSON")
+                            hoja_est.update_acell(1, 2, json.dumps(estrategia))
+                            st.success("✅ ¡Estrategia y mensaje guardados en la nube correctamente!")
                         except Exception as e:
-                            st.error(f"Error al guardar estrategia: {e}")
+                            st.error(f"🚨 Error: Crea una pestaña llamada 'Estrategia' en tu Google Sheets. Detalle: {e}")
                         
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -252,14 +264,24 @@ if menu == "🗺️ Distribución":
         # MODOS 1 Y 2: COORDIS OPERATIVOS
         # ==========================================
         else:
-            df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
+            # 1. Leemos el mensaje desde Google Sheets (Pestaña "Estrategia")
+            try:
+                hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
+                est_guardada = json.loads(hoja_est.acell('B1').value)
+                
+                if est_guardada.get("fecha") == str(st.session_state.fecha_dist):
+                    st.info(f"📜 **Instrucción Administrativa para el {st.session_state.fecha_dist.strftime('%d/%m/%Y')}:**\n\n{est_guardada.get('mensaje')}")
+            except:
+                pass # Si no hay archivo en la nube, no mostramos nada
+
+            # 2. Filtramos el equipo usando Disponibles_Hoy
+            df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador') & (df_global['Disponibles_Hoy'] == 'Si')].copy()
             
             if df_region.empty:
                 st.info(f"No hay verificadores disponibles en la región {region_sel} para esta fecha.")
             else:
                 st.subheader(f"👥 Equipo {region_sel} ({len(df_region)} personas)")
                 
-                # 1. Reordenamos los Tabs
                 tab_dados, tab_lotes, tab_manual = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno"])
                 
                 estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
@@ -271,36 +293,34 @@ if menu == "🗺️ Distribución":
                     st.markdown('<div class="mobile-card border-tinto">', unsafe_allow_html=True)
                     if st.button("🎲 Tirar los Dados", type="primary", use_container_width=True):
                         try:
-                            with open("estrategia_admin.json", "r") as f:
-                                estrategia = json.load(f)
+                            # Leer dados desde la nube también
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
+                            estrategia = json.loads(hoja_est.acell('B1').value)
                                 
-                            if estrategia.get("fecha") != str(fecha_sel):
-                                st.warning(f"⚠️ La estrategia guardada es para el {estrategia.get('fecha')}, no para el {fecha_sel}.")
+                            if estrategia.get("fecha") != str(st.session_state.fecha_dist):
+                                st.warning(f"⚠️ La estrategia en la nube es para el {estrategia.get('fecha')}, no para el {st.session_state.fecha_dist}.")
                             else:
                                 import random
                                 personas = df_region['Nombre'].tolist()
                                 random.shuffle(personas)
                                 
-                                # Llenar cubeta con las posiciones fijas
                                 cubeta = []
                                 for mod, qty in [("RE", estrategia.get("re", 0)), ("BB", estrategia.get("bb", 0)), 
                                                  ("CT", estrategia.get("ct", 0)), ("TCH", estrategia.get("tch", 0)), 
                                                  ("Irregularidades 4CH", estrategia.get("4ch", 0))]:
                                     cubeta.extend([mod] * qty)
                                 
-                                # Rellenar el resto
                                 if len(cubeta) < len(personas):
                                     cubeta.extend([estrategia.get("resto", "RE")] * (len(personas) - len(cubeta)))
                                 
                                 cubeta = cubeta[:len(personas)]
                                 random.shuffle(cubeta)
                                 
-                                # Guardar en memoria de sesión
                                 asignaciones = {persona: cubeta[i] for i, persona in enumerate(personas)}
                                 st.session_state[f'dados_{region_sel}'] = asignaciones
                                 st.success("🎲 ¡Dados tirados! Ve a la pestaña 'Uno a Uno' para ver el resultado y ajustar si es necesario.")
                         except:
-                            st.error("🚨 No se encontró una estrategia administrativa guardada.")
+                            st.error("🚨 No se encontró una estrategia administrativa guardada en la nube.")
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 with tab_lotes:
@@ -310,14 +330,11 @@ if menu == "🗺️ Distribución":
                 with tab_manual:
                     st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
                     
-                    # Leer resultados de los dados si existen en memoria
                     dict_dados = st.session_state.get(f'dados_{region_sel}', {})
                     
                     with st.form("form_distribucion"):
                         for index, row in df_region.iterrows():
                             nombre = row.get('Nombre', 'Sin Nombre')
-                            
-                            # Prioridad 1: Resultado de los Dados. Prioridad 2: Base de datos.
                             modulo_actual = dict_dados.get(nombre, row.get('Módulo', 'RE'))
                             
                             with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
@@ -326,7 +343,6 @@ if menu == "🗺️ Distribución":
                                     idx_mod = modulos_operativos.index(modulo_actual) if modulo_actual in modulos_operativos else 0
                                     st.selectbox("Módulo:", modulos_operativos, index=idx_mod, key=f"mod_{index}")
                                     
-                                    # Si viene de dados, forzamos a "Barrido", si no, leemos la BD (por hacer)
                                     estado_actual = "Barrido" if nombre in dict_dados else "Barrido" 
                                     idx_est = estados_disponibles.index(estado_actual) if estado_actual in estados_disponibles else 0
                                     st.selectbox("Estado:", estados_disponibles, index=idx_est, key=f"est_{index}")
