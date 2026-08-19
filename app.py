@@ -220,30 +220,16 @@ if menu == "🗺️ Distribución":
                 with tab_dados:
                     st.caption("Autocompletar usando la estrategia del Anillo de Poder.")
                     st.markdown('<div class="mobile-card border-tinto">AQUÍ LEEREMOS LA ESTRATEGIA AD Y REPARTIREMOS A LA GENTE</div>', unsafe_allow_html=True)
-
-elif menu == "📊 Monitoreo de Equipo":                
-                    for index, row in df_region.iterrows():
-                    nombre = row.get('Nombre', 'Sin Nombre')
-                    modulo_actual = row.get('Módulo', 'RE')
-                    
-                    with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            idx_mod = opciones_modulos.index(modulo_actual) if modulo_actual in opciones_modulos else 0
-                            st.selectbox("Módulo:", opciones_modulos, index=idx_mod, key=f"mod_{index}")
-                            st.text_input("Estado:", key=f"est_{index}")
-                        with col2:
-                            st.selectbox("Prioridad:", ["Ninguna", "1", "2", "3", "Urgente", "Especial"], key=f"prio_{index}")
-                            st.text_input("Municipio / Notas:", key=f"notas_{index}")
-                
-                submit_btn = st.form_submit_button("☁️ Guardar Distribución", type="primary", use_container_width=True)
-                if submit_btn:
-                    st.success("¡Asignaciones capturadas! (Aquí insertaremos la lógica de guardado a Sheets)")
+with tab_dados:
+                st.caption("Autocompletar usando la estrategia del Anillo de Poder.")
+                st.markdown('<div class="mobile-card border-tinto">AQUÍ LEEREMOS LA ESTRATEGIA AD Y REPARTIREMOS A LA GENTE</div>', unsafe_allow_html=True)
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
     st.markdown("Revisa productividad, pausas y capturas de pantalla de tu equipo.")
     
+    with st.container():
+        st.markdown('<div class="mobile-card border-verde">AQUÍ CONSTRUIREMOS LOS FILTROS DE FECHA Y RENDIMIENTO INDIVIDUAL</div>', unsafe_allow_html=True)
     with st.container():
         st.markdown('<div class="mobile-card border-verde">AQUÍ CONSTRUIREMOS LOS FILTROS DE FECHA Y RENDIMIENTO INDIVIDUAL</div>', unsafe_allow_html=True)
 
