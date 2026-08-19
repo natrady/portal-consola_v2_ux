@@ -416,9 +416,32 @@ if menu == "🗺️ Distribución":
                     
                     dict_dados = st.session_state.get(f'dados_{region_sel}', {})
                     
+                    # Validación matemática contra la estrategia global
+                    if dict_dados:
+                        try:
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                            estrategia = json.loads(hoja_est.acell('B1').value).get(str(st.session_state.fecha_dist), {})
+                            
+                            if estrategia:
+                                fijos = sum([estrategia.get('re',0), estrategia.get('bb',0), estrategia.get('ct',0), estrategia.get('tch',0), estrategia.get('4ch',0)])
+                                libres = max(0, len(df_region) - fijos)
+                                ideal = {"RE": estrategia.get('re',0), "BB": estrategia.get('bb',0), "CT": estrategia.get('ct',0), "TCH": estrategia.get('tch',0), "Irregularidades 4CH": estrategia.get('4ch',0), "Actividad Especial": 0, "Apoyo": 0}
+                                resto_mod = estrategia.get('resto', 'RE')
+                                if resto_mod in ideal: ideal[resto_mod] += libres
+                                    
+                                from collections import Counter
+                                real = Counter(dict_dados.values())
+                                
+                                if any(ideal[mod] != real.get(mod, 0) for mod in ideal.keys()):
+                                    st.warning("⚠️ **Advertencia:** La distribución actual descuadra con la estrategia administrativa. Sugerimos equilibrar.")
+                        except:
+                            pass
+                    
                     with st.form("form_distribucion"):
                         for index, row in df_region.iterrows():
                             nombre = row.get('Nombre', 'Sin Nombre')
+                            
+                            # Prioridad 1: Resultado de los Dados o Ajuste Manual. Prioridad 2: Base de datos.
                             modulo_actual = dict_dados.get(nombre, row.get('Módulo', 'RE'))
                             
                             with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
@@ -427,6 +450,7 @@ if menu == "🗺️ Distribución":
                                     idx_mod = modulos_operativos.index(modulo_actual) if modulo_actual in modulos_operativos else 0
                                     st.selectbox("Módulo:", modulos_operativos, index=idx_mod, key=f"mod_{index}")
                                     
+                                    # Si viene de dados, forzamos a "Barrido", si no, leemos la BD (por hacer)
                                     estado_actual = "Barrido" if nombre in dict_dados else "Barrido" 
                                     idx_est = estados_disponibles.index(estado_actual) if estado_actual in estados_disponibles else 0
                                     st.selectbox("Estado:", estados_disponibles, index=idx_est, key=f"est_{index}")
@@ -434,7 +458,15 @@ if menu == "🗺️ Distribución":
                                     st.multiselect("Municipios:", municipios_dummy, key=f"mun_{index}")
                                     st.text_input("Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, contactar a...")
                         
-                        st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True)
+                        if st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True):
+                            # Recolectar lo que se movió a mano y guardarlo en memoria
+                            nueva_dist = {}
+                            for index, row in df_region.iterrows():
+                                nombre = row.get('Nombre', 'Sin Nombre')
+                                nueva_dist[nombre] = st.session_state[f"mod_{index}"]
+                            
+                            st.session_state[f'dados_{region_sel}'] = nueva_dist
+                            st.rerun() # Reiniciamos para que la tabla y el mensaje lean los nuevos cambios
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
