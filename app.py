@@ -66,6 +66,15 @@ mapa_regiones = {
 opciones_regiones_limpias = ["CO", "NC", "No", "PO", "SS", "AD", "Apoyo"]
 opciones_modulos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH", "Apoyo", "Vacaciones", "Incapacidad"]
 
+# Catálogo geográfico duro para los desplegables
+estados_por_region = {
+    "CO": ["Ciudad de México", "México", "Morelos", "Puebla", "Tlaxcala"],
+    "NC": ["Coahuila de Zaragoza", "Hidalgo", "Nuevo León", "Querétaro", "San Luis Potosí", "Tamaulipas", "Veracruz"],
+    "No": ["Aguascalientes", "Baja California", "Baja California Sur", "Chihuahua", "Durango", "Sinaloa", "Sonora", "Zacatecas"],
+    "PO": ["Colima", "Guanajuato", "Guerrero", "Jalisco", "Michoacán de Ocampo", "Nayarit"],
+    "SS": ["Campeche", "Chiapas", "Oaxaca", "Quintana Roo", "Tabasco", "Yucatán"]
+}
+
 @st.cache_data(ttl=600, show_spinner="Descargando Personal...")
 def cargar_personal():
     if not gc: return pd.DataFrame()
@@ -173,8 +182,15 @@ if menu == "🗺️ Distribución":
                     total_asignados = q_re + q_bb + q_ct + q_tch
                     lugares_libres = limite_minimo - total_asignados
                     
+                    # Lógica excluyente para "El resto"
+                    opciones_resto = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH"]
+                    if q_re > 0 and "RE" in opciones_resto: opciones_resto.remove("RE")
+                    if q_bb > 0 and "BB" in opciones_resto: opciones_resto.remove("BB")
+                    if q_ct > 0 and "CT" in opciones_resto: opciones_resto.remove("CT")
+                    if q_tch > 0 and "TCH" in opciones_resto: opciones_resto.remove("TCH")
+                    
                     st.markdown(f"**El resto ({lugares_libres} asignaciones dinámicas):**")
-                    resto_a = st.selectbox("🎯 Los demás se irán a:", ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH"])
+                    resto_a = st.selectbox("🎯 Los demás se irán a:", opciones_resto)
                     
                     if total_asignados > limite_minimo:
                         st.error(f"🚨 ¡Alto ahí! Asignaste {total_asignados} posiciones fijas, pero tu límite es {limite_minimo}. Reduce los números.")
@@ -182,20 +198,23 @@ if menu == "🗺️ Distribución":
                         st.warning(f"⚠️ Asignaste 0 fijos. Básicamente estás mandando a todos a {resto_a}.")
                     else:
                         st.success(f"Configuración válida. Los {lugares_libres} verificadores restantes se asignarán a {resto_a}.")
-                
-                    if st.button("💾 Guardar Estrategia Global", type="primary", use_container_width=True, disabled=(total_asignados > limite_minimo)):
-                        # Armamos el mensaje dinámicamente
+                        
+                        # Generador de mensaje en balas
                         partes = []
-                        if q_tch > 0: partes.append(f"{q_tch} persona(s) por región en Tercer Check")
-                        if q_re > 0: partes.append(f"{q_re} persona(s) limpiando RE")
-                        if q_bb > 0: partes.append(f"{q_bb} persona(s) limpiando BaBien")
-                        if q_ct > 0: partes.append(f"{q_ct} persona(s) por región en Centros de Trabajo")
+                        if q_tch > 0: partes.append(f"* Tercer Check: {q_tch} persona(s)")
+                        if q_re > 0: partes.append(f"* Revisión de Expedientes: {q_re} persona(s)")
+                        if q_bb > 0: partes.append(f"* BaBien: {q_bb} persona(s)")
+                        if q_ct > 0: partes.append(f"* Centros de Trabajo: {q_ct} persona(s)")
                         
-                        txt_medio = "; ".join(partes)
-                        mensaje_final = f"Buenas tardes. La distribución para mañana es la siguiente: {txt_medio} y el resto en {resto_a.lower()}."
+                        texto_balas = "\n".join(partes)
+                        mensaje_default = f"Buenas tardes. La distribución para mañana por región es la siguiente:\n{texto_balas}\n* Y el resto en {resto_a}."
                         
-                        st.success("✅ ¡Estrategia guardada correctamente!")
-                        st.info(f"**Mensaje sugerido:**\n{mensaje_final}")
+                        st.markdown("**Mensaje Oficial (puedes editarlo antes de guardar):**")
+                        mensaje_editable = st.text_area("Texto del mensaje", value=mensaje_default, height=180, label_visibility="collapsed")
+                
+                    if st.button("💾 Guardar Estrategia Oficial", type="primary", use_container_width=True, disabled=(total_asignados > limite_minimo)):
+                        # Aquí luego inyectaremos el JSON a Drive
+                        st.success("✅ ¡Estrategia y mensaje guardados correctamente!")
                         
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -214,6 +233,10 @@ if menu == "🗺️ Distribución":
                 
                 with tab_manual:
                     st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
+                    
+                    # Cargamos los estados de la región elegida
+                    estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
+                    
                     with st.form("form_distribucion"):
                         for index, row in df_region.iterrows():
                             nombre = row.get('Nombre', 'Sin Nombre')
@@ -224,18 +247,9 @@ if menu == "🗺️ Distribución":
                                 with c1:
                                     idx_mod = opciones_modulos.index(modulo_actual) if modulo_actual in opciones_modulos else 0
                                     st.selectbox("Módulo:", opciones_modulos, index=idx_mod, key=f"mod_{index}")
-                                    st.text_input("Estado:", key=f"est_{index}")
+                                    st.selectbox("Estado:", estados_disponibles, key=f"est_{index}")
                                 with c2:
-                                    # Lógica condicional de prioridades según el módulo actual
-                                    if modulo_actual == "RE":
-                                        opts_prio = ["Ninguna", "1", "2", "3"]
-                                    elif modulo_actual == "BB":
-                                        opts_prio = ["Ninguna", "1", "2", "3", "4"]
-                                    else:
-                                        opts_prio = ["Ninguna"]
-                                        
-                                    st.selectbox("Prioridad:", opts_prio, key=f"prio_{index}")
-                                    st.text_input("Municipio / Notas:", key=f"notas_{index}")
+                                    st.text_input("Municipio / Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, Solo capital...")
                         
                         st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True)
 
