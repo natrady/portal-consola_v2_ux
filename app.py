@@ -386,7 +386,8 @@ if menu == "🗺️ Distribución":
                         borrador_final = plantilla_region.replace("[MODULOS]", mods_str)
                         
                         st.markdown("#### 📝 Borrador para WhatsApp")
-                        st.text_area("Copia el mensaje generado con la distribución de hoy:", value=borrador_final, height=180, key=f"draft_{region_sel}", label_visibility="collapsed")
+                        # Eliminamos el 'key' de Streamlit para obligar al cuadro de texto a refrescarse con tu nueva plantilla
+                        st.text_area("Copia el mensaje generado con la distribución de hoy:", value=borrador_final, height=180, label_visibility="collapsed")
                         
                         # Editor de Plantilla
                         with st.expander("⚙️ Editar mi machote base"):
