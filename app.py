@@ -190,12 +190,11 @@ if menu == "🗺️ Distribución":
                     
                 else:
                     st.markdown("**Posiciones Fijas (No exceder el límite operativo):**")
-                    c1, c2, c3 = st.columns(3)
+                    # Forzamos 5 columnas para que quepan todos los módulos
+                    c1, c2, c3, c4, c5 = st.columns(5)
                     q_re = c1.number_input("RE", min_value=0, max_value=limite_minimo, value=0, step=1)
                     q_bb = c2.number_input("BB", min_value=0, max_value=limite_minimo, value=0, step=1)
                     q_ct = c3.number_input("CT", min_value=0, max_value=limite_minimo, value=0, step=1)
-                    
-                    c4, c5, c6 = st.columns(3)
                     q_tch = c4.number_input("TCH", min_value=0, max_value=limite_minimo, value=0, step=1)
                     q_4ch = c5.number_input("4CH", min_value=0, max_value=limite_minimo, value=0, step=1)
                     
@@ -256,41 +255,86 @@ if menu == "🗺️ Distribución":
             df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
             
             if df_region.empty:
-                st.info(f"No hay verificadores registrados en la región {region_sel}.")
+                st.info(f"No hay verificadores disponibles en la región {region_sel} para esta fecha.")
             else:
                 st.subheader(f"👥 Equipo {region_sel} ({len(df_region)} personas)")
                 
-                tab_manual, tab_lotes, tab_dados = st.tabs(["✍️ Uno a Uno", "📦 Por Lotes", "🎲 Dados Estratégicos"])
+                # 1. Reordenamos los Tabs
+                tab_dados, tab_lotes, tab_manual = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno"])
                 
-                with tab_manual:
-                    st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
-                    
-                    # Cargamos los estados de la región elegida
-                    estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
-                    
-                    with st.form("form_distribucion"):
-                        for index, row in df_region.iterrows():
-                            nombre = row.get('Nombre', 'Sin Nombre')
-                            modulo_actual = row.get('Módulo', 'RE')
-                            
-                            with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
-                                c1, c2 = st.columns(2)
-                                with c1:
-                                    idx_mod = opciones_modulos.index(modulo_actual) if modulo_actual in opciones_modulos else 0
-                                    st.selectbox("Módulo:", opciones_modulos, index=idx_mod, key=f"mod_{index}")
-                                    st.selectbox("Estado:", estados_disponibles, key=f"est_{index}")
-                                with c2:
-                                    st.text_input("Municipio / Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, Solo capital...")
-                        
-                        st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True)
+                estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
+                modulos_operativos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH", "Apoyo"]
+                municipios_dummy = ["Capital", "Zona Norte", "Zona Sur", "Focalizado A", "Focalizado B"]
+                
+                with tab_dados:
+                    st.caption("Tira los dados para aplicar la estrategia administrativa del día de forma aleatoria.")
+                    st.markdown('<div class="mobile-card border-tinto">', unsafe_allow_html=True)
+                    if st.button("🎲 Tirar los Dados", type="primary", use_container_width=True):
+                        try:
+                            with open("estrategia_admin.json", "r") as f:
+                                estrategia = json.load(f)
+                                
+                            if estrategia.get("fecha") != str(fecha_sel):
+                                st.warning(f"⚠️ La estrategia guardada es para el {estrategia.get('fecha')}, no para el {fecha_sel}.")
+                            else:
+                                import random
+                                personas = df_region['Nombre'].tolist()
+                                random.shuffle(personas)
+                                
+                                # Llenar cubeta con las posiciones fijas
+                                cubeta = []
+                                for mod, qty in [("RE", estrategia.get("re", 0)), ("BB", estrategia.get("bb", 0)), 
+                                                 ("CT", estrategia.get("ct", 0)), ("TCH", estrategia.get("tch", 0)), 
+                                                 ("Irregularidades 4CH", estrategia.get("4ch", 0))]:
+                                    cubeta.extend([mod] * qty)
+                                
+                                # Rellenar el resto
+                                if len(cubeta) < len(personas):
+                                    cubeta.extend([estrategia.get("resto", "RE")] * (len(personas) - len(cubeta)))
+                                
+                                cubeta = cubeta[:len(personas)]
+                                random.shuffle(cubeta)
+                                
+                                # Guardar en memoria de sesión
+                                asignaciones = {persona: cubeta[i] for i, persona in enumerate(personas)}
+                                st.session_state[f'dados_{region_sel}'] = asignaciones
+                                st.success("🎲 ¡Dados tirados! Ve a la pestaña 'Uno a Uno' para ver el resultado y ajustar si es necesario.")
+                        except:
+                            st.error("🚨 No se encontró una estrategia administrativa guardada.")
+                    st.markdown('</div>', unsafe_allow_html=True)
 
                 with tab_lotes:
                     st.caption("Asigna a múltiples verificadores al mismo tiempo.")
                     st.markdown('<div class="mobile-card border-verde">AQUÍ PONDREMOS LOS SELECTORES MÚLTIPLES</div>', unsafe_allow_html=True)
 
-                with tab_dados:
-                    st.caption("Autocompletar usando la estrategia del Anillo de Poder.")
-                    st.markdown('<div class="mobile-card border-tinto">AQUÍ LEEREMOS LA ESTRATEGIA AD Y REPARTIREMOS A LA GENTE</div>', unsafe_allow_html=True)
+                with tab_manual:
+                    st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
+                    
+                    # Leer resultados de los dados si existen en memoria
+                    dict_dados = st.session_state.get(f'dados_{region_sel}', {})
+                    
+                    with st.form("form_distribucion"):
+                        for index, row in df_region.iterrows():
+                            nombre = row.get('Nombre', 'Sin Nombre')
+                            
+                            # Prioridad 1: Resultado de los Dados. Prioridad 2: Base de datos.
+                            modulo_actual = dict_dados.get(nombre, row.get('Módulo', 'RE'))
+                            
+                            with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
+                                c1, c2 = st.columns(2)
+                                with c1:
+                                    idx_mod = modulos_operativos.index(modulo_actual) if modulo_actual in modulos_operativos else 0
+                                    st.selectbox("Módulo:", modulos_operativos, index=idx_mod, key=f"mod_{index}")
+                                    
+                                    # Si viene de dados, forzamos a "Barrido", si no, leemos la BD (por hacer)
+                                    estado_actual = "Barrido" if nombre in dict_dados else "Barrido" 
+                                    idx_est = estados_disponibles.index(estado_actual) if estado_actual in estados_disponibles else 0
+                                    st.selectbox("Estado:", estados_disponibles, index=idx_est, key=f"est_{index}")
+                                with c2:
+                                    st.multiselect("Municipios:", municipios_dummy, key=f"mun_{index}")
+                                    st.text_input("Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, contactar a...")
+                        
+                        st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True)
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
