@@ -2,7 +2,22 @@ import streamlit as st
 import pandas as pd
 import datetime
 import plotly.graph_objects as go
-# Aquí luego importaremos gspread y oauth cuando conectemos la BD
+import gspread
+from google.oauth2.service_account import Credentials
+
+# ==========================================
+# 0. AUTENTICACIÓN GOOGLE CLOUD
+# ==========================================
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+try:
+    credenciales_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(credenciales_dict, scopes=SCOPES)
+    gc = gspread.authorize(creds)
+except Exception as e:
+    st.error(f"🚨 Error de autenticación. Revisa tus st.secrets en Streamlit Cloud. Detalle: {e}")
+    gc = None
+
+SHEET_PERSONAL_ID = "1WJ2v0IMmfd55hui5YLmDDJ8Hp8tVrdIP-mtb1kdaJXw"
 
 # ==========================================
 # 1. CONFIGURACIÓN Y ESTILOS MÓVILES (UX/UI)
@@ -51,6 +66,42 @@ mapa_regiones = {
 opciones_regiones_limpias = ["CO", "NC", "No", "PO", "SS", "AD", "Apoyo"]
 opciones_modulos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Apoyo", "Vacaciones", "Incapacidad"]
 
+@st.cache_data(ttl=600, show_spinner="Descargando Personal...")
+def cargar_personal():
+    if not gc: return pd.DataFrame()
+    try:
+        hoja = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+        df = pd.DataFrame(hoja.get_all_records())
+        if df.empty: return df
+        
+        # Blindaje: limpiar espacios nulos en las cabeceras
+        df.columns = df.columns.str.strip()
+        
+        # Mapeo de niveles a roles legibles
+        mapa_niveles = {0: "Coordinador", 2: "Verificador", 3: "Administrativo"}
+        df['Rol'] = pd.to_numeric(df.get('Nivel', 2), errors='coerce').map(mapa_niveles).fillna("Desconocido")
+        
+        # Limpieza de fechas y disponibilidad real
+        hoy = datetime.datetime.now().date()
+        if 'Inicio incidencia' in df.columns:
+            df['Inicio incidencia'] = pd.to_datetime(df['Inicio incidencia'], errors='coerce').dt.date
+        if 'Fin Incidencia' in df.columns:
+            df['Fin Incidencia'] = pd.to_datetime(df['Fin Incidencia'], errors='coerce').dt.date
+            
+        def calc_disp(fila):
+            if pd.notna(fila.get('Inicio incidencia')) and pd.notna(fila.get('Fin Incidencia')):
+                if fila['Inicio incidencia'] <= hoy <= fila['Fin Incidencia']:
+                    return "No"
+            return "Si"
+            
+        df['Disponibles'] = df.apply(calc_disp, axis=1)
+        return df
+    except Exception as e:
+        st.error(f"Error leyendo Personal_DB: {e}")
+        return pd.DataFrame()
+
+df_global = cargar_personal()
+
 # ==========================================
 # 3. BARRA LATERAL (NAVEGACIÓN)
 # ==========================================
@@ -75,8 +126,36 @@ if menu == "🗺️ Distribución":
     st.title("🗺️ Distribución Operativa")
     st.markdown("Asigna el trabajo de tu región de forma rápida.")
     
-    with st.container():
-        st.markdown('<div class="mobile-card border-tinto">AQUÍ CONSTRUIREMOS EL FORMULARIO DE ASIGNACIÓN MÓVIL</div>', unsafe_allow_html=True)
+    if df_global.empty:
+        st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
+    else:
+        region_sel = st.selectbox("📍 Selecciona tu Región:", opciones_regiones_limpias)
+        st.divider()
+        
+        # Filtramos solo verificadores de esa región
+        df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
+        
+        if df_region.empty:
+            st.info(f"No hay verificadores registrados en la región {region_sel}.")
+        else:
+            with st.form("form_distribucion"):
+                for index, row in df_region.iterrows():
+                    nombre = row.get('Nombre', 'Sin Nombre')
+                    modulo_actual = row.get('Módulo', 'RE')
+                    
+                    with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            idx_mod = opciones_modulos.index(modulo_actual) if modulo_actual in opciones_modulos else 0
+                            st.selectbox("Módulo:", opciones_modulos, index=idx_mod, key=f"mod_{index}")
+                            st.text_input("Estado:", key=f"est_{index}")
+                        with col2:
+                            st.selectbox("Prioridad:", ["Ninguna", "1", "2", "3", "Urgente", "Especial"], key=f"prio_{index}")
+                            st.text_input("Municipio / Notas:", key=f"notas_{index}")
+                
+                submit_btn = st.form_submit_button("☁️ Guardar Distribución", type="primary", use_container_width=True)
+                if submit_btn:
+                    st.success("¡Asignaciones capturadas! (Aquí insertaremos la lógica de guardado a Sheets)")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
