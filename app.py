@@ -357,19 +357,52 @@ if menu == "🗺️ Distribución":
                         st.markdown("### 📋 Vista Previa de Asignación")
                         asignaciones_actuales = st.session_state[f'dados_{region_sel}']
                         
-                        # Generamos una tabla HTML limpia y veloz (UX)
-                        html_tabla = "<table style='width:100%; border-collapse: collapse; background-color: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px;'><tr style='background-color: #9b2247; color: white;'><th style='padding: 10px; text-align: left;'>Verificador</th><th style='padding: 10px; text-align: left;'>Módulo Asignado</th></tr>"
-                        for persona, mod in asignaciones_actuales.items():
-                            html_tabla += f"<tr style='border-bottom: 1px solid #f1f3f5;'><td style='padding: 8px;'>👤 {persona}</td><td style='padding: 8px;'><b>{mod}</b></td></tr>"
+                        # Generamos una tabla HTML con UI pulida
+                        html_tabla = "<table style='width:100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-family: sans-serif; font-size: 14px; margin-bottom: 20px;'><tr style='background-color: #9b2247; color: white; text-align: left;'><th style='padding: 12px 15px;'>Verificador</th><th style='padding: 12px 15px;'>Módulo Asignado</th></tr>"
+                        for i, (persona, mod) in enumerate(asignaciones_actuales.items()):
+                            bg_color = "#f8f9fa" if i % 2 == 0 else "#ffffff"
+                            html_tabla += f"<tr style='background-color: {bg_color}; border-bottom: 1px solid #e9ecef;'><td style='padding: 10px 15px; color: #343a40;'>👤 {persona}</td><td style='padding: 10px 15px; color: #1e5b4f; font-weight: 600;'>{mod}</td></tr>"
                         html_tabla += "</table>"
                         st.markdown(html_tabla, unsafe_allow_html=True)
                         
-                        # Generador del borrador de WhatsApp
+                        # Lógica del borrador dinámico de WhatsApp
                         modulos_unicos = list(set(asignaciones_actuales.values()))
                         mods_str = ", ".join(modulos_unicos[:-1]) + f" y {modulos_unicos[-1]}" if len(modulos_unicos) > 1 else modulos_unicos[0]
                         
-                        borrador = f"Buenos días a tod@s 🍀\n\nEl día de hoy estaremos trabajando en los módulos de {mods_str} en la Región {region_sel}, por lo cual debemos atender las siguientes indicaciones:\n\nDebemos tomar en cuenta la administración de nuestros tiempos para alcanzar nuestras metas sin descuidar la calidad de nuestras verificaciones.\n\nQue tengan una excelente jornada 😉"
-                        st.text_area("📝 Borrador de Mensaje (Cópialo para WhatsApp):", value=borrador, height=250)
+                        # Leer plantillas desde B2 en Sheets (manejo defensivo)
+                        try:
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                            try:
+                                plantillas_json = json.loads(hoja_est.acell('B2').value)
+                            except:
+                                plantillas_json = {}
+                        except:
+                            plantillas_json = {}
+                            
+                        plantilla_default = f"Buenos días a tod@s 🍀\n\nEl día de hoy estaremos trabajando en los módulos de [MODULOS] en la Región {region_sel}.\n\nQue tengan una excelente jornada 😉"
+                        plantilla_region = plantillas_json.get(region_sel, plantilla_default)
+                        
+                        # Reemplazamos el comodín por los módulos reales de la tirada
+                        borrador_final = plantilla_region.replace("[MODULOS]", mods_str)
+                        
+                        st.markdown("#### 📝 Borrador para WhatsApp")
+                        st.text_area("Copia el mensaje generado con la distribución de hoy:", value=borrador_final, height=180, key=f"draft_{region_sel}", label_visibility="collapsed")
+                        
+                        # Editor de Plantilla
+                        with st.expander("⚙️ Editar mi machote base"):
+                            st.caption("Usa la etiqueta exacta **[MODULOS]** donde quieras que se inserten automáticamente los módulos asignados ese día.")
+                            nueva_plantilla = st.text_area("Edita el formato para tu región:", value=plantilla_region, height=180, key=f"template_{region_sel}")
+                            
+                            if st.button("💾 Guardar como mi machote default", use_container_width=True):
+                                plantillas_json[region_sel] = nueva_plantilla
+                                try:
+                                    hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                                    hoja_est.update_acell('A2', 'Plantillas_Mensajes')
+                                    hoja_est.update_acell('B2', json.dumps(plantillas_json))
+                                    st.success("✅ ¡Plantilla actualizada! Se usará para tus próximas distribuciones.")
+                                    st.rerun() # Recargamos para que el cambio se vea inmediato
+                                except Exception as e:
+                                    st.error(f"Error al guardar en Sheets: {e}")
 
                     st.markdown('</div>', unsafe_allow_html=True)
 
