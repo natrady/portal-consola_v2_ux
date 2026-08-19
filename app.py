@@ -130,22 +130,98 @@ st.sidebar.info("Usuario prueba: Admin") # Luego lo conectamos al Anillo de Pode
 # ==========================================
 if menu == "🗺️ Distribución":
     st.title("🗺️ Distribución Operativa")
-    st.markdown("Asigna el trabajo de tu región de forma rápida.")
     
     if df_global.empty:
         st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
     else:
-        region_sel = st.selectbox("📍 Selecciona tu Región:", opciones_regiones_limpias)
+        # Extraemos las regiones operativas y calculamos su personal disponible
+        df_operativos = df_global[(df_global['Rol'] == 'Verificador') & (df_global['Disponibles'] == 'Si') & (~df_global['Región'].isin(['AD', 'Apoyo']))]
+        conteo_regiones = df_operativos['Región'].value_counts()
+        limite_minimo = int(conteo_regiones.min()) if not conteo_regiones.empty else 0
+
+        region_sel = st.selectbox("📍 Selecciona tu Región para trabajar:", opciones_regiones_limpias)
         st.divider()
         
-        # Filtramos solo verificadores de esa región
-        df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
-        
-        if df_region.empty:
-            st.info(f"No hay verificadores registrados en la región {region_sel}.")
+        # ==========================================
+        # MODO 3: ESTRATEGIA GLOBAL (SOLO PARA AD)
+        # ==========================================
+        if region_sel == "AD":
+            st.subheader("👑 Configuración del Anillo de Poder (Dados)")
+            st.info(f"💡 **Límite Operativo:** La región más pequeña tiene **{limite_minimo}** verificadores disponibles hoy. Ese es tu tope máximo para asignar plazas fijas.")
+            
+            tipo_estrategia = st.radio("Tipo de Estrategia:", ["Asignar a TODOS a un solo módulo", "Repartir posiciones fijas"], horizontal=True)
+            
+            with st.container():
+                st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
+                if tipo_estrategia == "Asignar a TODOS a un solo módulo":
+                    mod_todos = st.selectbox("🎯 Módulo para toda la plantilla:", ["RE", "BB", "CT", "TCH", "Actividad Especial"])
+                    st.success(f"Configuración lista: El 100% de los verificadores disponibles irán a {mod_todos}.")
+                    
+                else:
+                    st.markdown("**Posiciones Fijas (No exceder el límite operativo):**")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    q_re = col1.number_input("RE", min_value=0, max_value=limite_minimo, value=0, step=1)
+                    q_bb = col2.number_input("BB", min_value=0, max_value=limite_minimo, value=0, step=1)
+                    q_ct = col3.number_input("CT", min_value=0, max_value=limite_minimo, value=0, step=1)
+                    q_tch = col4.number_input("TCH", min_value=0, max_value=limite_minimo, value=0, step=1)
+                    
+                    total_asignados = q_re + q_bb + q_ct + q_tch
+                    
+                    st.markdown("**Comodín:**")
+                    resto_a = st.selectbox("🔄 Los verificadores sobrantes se irán a:", ["RE", "BB", "CT", "TCH", "Actividad Especial"])
+                    
+                    if total_asignados > limite_minimo:
+                        st.error(f"🚨 ¡Alto ahí! Asignaste {total_asignados} posiciones fijas, pero tu límite es {limite_minimo}. Reduce los números.")
+                    elif total_asignados == 0:
+                        st.warning(f"⚠️ Asignaste 0 fijos. Básicamente estás mandando a todos a {resto_a}.")
+                    else:
+                        st.success(f"Configuración válida. Quedan {limite_minimo - total_asignados} lugares libres para el comodín en la región más chica.")
+                
+                st.button("💾 Guardar Estrategia Global", type="primary", use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # ==========================================
+        # MODOS 1 Y 2: COORDIS OPERATIVOS
+        # ==========================================
         else:
-            with st.form("form_distribucion"):
-                for index, row in df_region.iterrows():
+            df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
+            
+            if df_region.empty:
+                st.info(f"No hay verificadores registrados en la región {region_sel}.")
+            else:
+                st.subheader(f"👥 Equipo {region_sel} ({len(df_region)} personas)")
+                
+                tab_manual, tab_lotes, tab_dados = st.tabs(["✍️ Uno a Uno", "📦 Por Lotes", "🎲 Dados Estratégicos"])
+                
+                with tab_manual:
+                    st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
+                    with st.form("form_distribucion"):
+                        for index, row in df_region.iterrows():
+                            nombre = row.get('Nombre', 'Sin Nombre')
+                            modulo_actual = row.get('Módulo', 'RE')
+                            
+                            with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
+                                c1, c2 = st.columns(2)
+                                with c1:
+                                    idx_mod = opciones_modulos.index(modulo_actual) if modulo_actual in opciones_modulos else 0
+                                    st.selectbox("Módulo:", opciones_modulos, index=idx_mod, key=f"mod_{index}")
+                                    st.text_input("Estado:", key=f"est_{index}")
+                                with c2:
+                                    st.selectbox("Prioridad:", ["Ninguna", "1", "2", "3", "Urgente", "Especial"], key=f"prio_{index}")
+                                    st.text_input("Municipio / Notas:", key=f"notas_{index}")
+                        
+                        st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True)
+
+                with tab_lotes:
+                    st.caption("Asigna a múltiples verificadores al mismo tiempo.")
+                    st.markdown('<div class="mobile-card border-verde">AQUÍ PONDREMOS LOS SELECTORES MÚLTIPLES</div>', unsafe_allow_html=True)
+
+                with tab_dados:
+                    st.caption("Autocompletar usando la estrategia del Anillo de Poder.")
+                    st.markdown('<div class="mobile-card border-tinto">AQUÍ LEEREMOS LA ESTRATEGIA AD Y REPARTIREMOS A LA GENTE</div>', unsafe_allow_html=True)
+
+elif menu == "📊 Monitoreo de Equipo":                for index, row in df_region.iterrows():
                     nombre = row.get('Nombre', 'Sin Nombre')
                     modulo_actual = row.get('Módulo', 'RE')
                     
