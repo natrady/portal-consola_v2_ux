@@ -64,7 +64,7 @@ mapa_regiones = {
 }
 
 opciones_regiones_limpias = ["CO", "NC", "No", "PO", "SS", "AD", "Apoyo"]
-opciones_modulos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Apoyo", "Vacaciones", "Incapacidad"]
+opciones_modulos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH", "Apoyo", "Vacaciones", "Incapacidad"]
 
 @st.cache_data(ttl=600, show_spinner="Descargando Personal...")
 def cargar_personal():
@@ -146,7 +146,7 @@ if menu == "🗺️ Distribución":
         # MODO 3: ESTRATEGIA GLOBAL (SOLO PARA AD)
         # ==========================================
         if region_sel == "AD":
-            st.subheader("👑 Configuración del Anillo de Poder (Dados)")
+            st.subheader("Distribución Administrativa")
             st.info(f"💡 **Límite Operativo:** La región más pequeña tiene **{limite_minimo}** verificadores disponibles hoy. Ese es tu tope máximo para asignar plazas fijas.")
             
             tipo_estrategia = st.radio("Tipo de Estrategia:", ["Asignar a TODOS a un solo módulo", "Repartir posiciones fijas"], horizontal=True)
@@ -154,8 +154,12 @@ if menu == "🗺️ Distribución":
             with st.container():
                 st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
                 if tipo_estrategia == "Asignar a TODOS a un solo módulo":
-                    mod_todos = st.selectbox("🎯 Módulo para toda la plantilla:", ["RE", "BB", "CT", "TCH", "Actividad Especial"])
+                    mod_todos = st.selectbox("🎯 Módulo para toda la plantilla:", ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH"])
                     st.success(f"Configuración lista: El 100% de los verificadores disponibles irán a {mod_todos}.")
+                    
+                    if st.button("💾 Guardar Estrategia Global", type="primary", use_container_width=True):
+                        st.success("✅ ¡Estrategia guardada correctamente!")
+                        st.info(f"**Mensaje sugerido:**\nBuenas tardes. La distribución para mañana es la siguiente: toda la plantilla a {mod_todos}.")
                     
                 else:
                     st.markdown("**Posiciones Fijas (No exceder el límite operativo):**")
@@ -167,18 +171,32 @@ if menu == "🗺️ Distribución":
                     q_tch = col4.number_input("TCH", min_value=0, max_value=limite_minimo, value=0, step=1)
                     
                     total_asignados = q_re + q_bb + q_ct + q_tch
+                    lugares_libres = limite_minimo - total_asignados
                     
-                    st.markdown("**Comodín:**")
-                    resto_a = st.selectbox("🔄 Los verificadores sobrantes se irán a:", ["RE", "BB", "CT", "TCH", "Actividad Especial"])
+                    st.markdown(f"**El resto ({lugares_libres} asignaciones dinámicas):**")
+                    resto_a = st.selectbox("🎯 Los demás se irán a:", ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH"])
                     
                     if total_asignados > limite_minimo:
                         st.error(f"🚨 ¡Alto ahí! Asignaste {total_asignados} posiciones fijas, pero tu límite es {limite_minimo}. Reduce los números.")
                     elif total_asignados == 0:
                         st.warning(f"⚠️ Asignaste 0 fijos. Básicamente estás mandando a todos a {resto_a}.")
                     else:
-                        st.success(f"Configuración válida. Quedan {limite_minimo - total_asignados} lugares libres para el comodín en la región más chica.")
+                        st.success(f"Configuración válida. Los {lugares_libres} verificadores restantes se asignarán a {resto_a}.")
                 
-                st.button("💾 Guardar Estrategia Global", type="primary", use_container_width=True)
+                    if st.button("💾 Guardar Estrategia Global", type="primary", use_container_width=True, disabled=(total_asignados > limite_minimo)):
+                        # Armamos el mensaje dinámicamente
+                        partes = []
+                        if q_tch > 0: partes.append(f"{q_tch} persona(s) por región en Tercer Check")
+                        if q_re > 0: partes.append(f"{q_re} persona(s) limpiando RE")
+                        if q_bb > 0: partes.append(f"{q_bb} persona(s) limpiando BaBien")
+                        if q_ct > 0: partes.append(f"{q_ct} persona(s) por región en Centros de Trabajo")
+                        
+                        txt_medio = "; ".join(partes)
+                        mensaje_final = f"Buenas tardes. La distribución para mañana es la siguiente: {txt_medio} y el resto en {resto_a.lower()}."
+                        
+                        st.success("✅ ¡Estrategia guardada correctamente!")
+                        st.info(f"**Mensaje sugerido:**\n{mensaje_final}")
+                        
                 st.markdown('</div>', unsafe_allow_html=True)
 
         # ==========================================
@@ -208,7 +226,15 @@ if menu == "🗺️ Distribución":
                                     st.selectbox("Módulo:", opciones_modulos, index=idx_mod, key=f"mod_{index}")
                                     st.text_input("Estado:", key=f"est_{index}")
                                 with c2:
-                                    st.selectbox("Prioridad:", ["Ninguna", "1", "2", "3", "Urgente", "Especial"], key=f"prio_{index}")
+                                    # Lógica condicional de prioridades según el módulo actual
+                                    if modulo_actual == "RE":
+                                        opts_prio = ["Ninguna", "1", "2", "3"]
+                                    elif modulo_actual == "BB":
+                                        opts_prio = ["Ninguna", "1", "2", "3", "4"]
+                                    else:
+                                        opts_prio = ["Ninguna"]
+                                        
+                                    st.selectbox("Prioridad:", opts_prio, key=f"prio_{index}")
                                     st.text_input("Municipio / Notas:", key=f"notas_{index}")
                         
                         st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True)
