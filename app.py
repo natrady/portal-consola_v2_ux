@@ -174,8 +174,20 @@ if menu == "🗺️ Distribución":
         # ==========================================
         if region_sel == "AD":
             st.subheader("Distribución Administrativa")
-            st.info(f"💡 **Límite Operativo:** La región más pequeña tiene **{limite_minimo}** verificadores disponibles hoy. Ese es tu tope máximo para asignar plazas fijas.")
             
+            # Mostramos el personal disponible por región con métricas limpias
+            cols_disp = st.columns(len(conteo_regiones))
+            for i, (reg, qty) in enumerate(conteo_regiones.items()):
+                cols_disp[i].metric(reg, qty)
+            st.caption(f"💡 Tu tope máximo para posiciones fijas es **{limite_minimo}** (la región más pequeña).")
+            
+            # Memoria: Intentamos leer si ya hay una estrategia guardada para pre-llenar los números
+            try:
+                hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                est_hoy = json.loads(hoja_est.acell('B1').value).get(str(st.session_state.fecha_dist), {})
+            except:
+                est_hoy = {}
+                
             tipo_estrategia = st.radio("Tipo de Estrategia:", ["Asignar a TODOS a un solo módulo", "Repartir posiciones fijas"], horizontal=True)
             
             with st.container():
@@ -207,14 +219,15 @@ if menu == "🗺️ Distribución":
                             st.error(f"🚨 Error: Asegúrate de renombrar la pestaña a 'Distribución' en Sheets. Detalle: {e}")
                     
                 else:
-                    st.markdown("**Posiciones Fijas (No exceder el límite operativo):**")
+                    st.markdown("**Posiciones Fijas:**")
                     # Forzamos 5 columnas para que quepan todos los módulos
                     c1, c2, c3, c4, c5 = st.columns(5)
-                    q_re = c1.number_input("RE", min_value=0, max_value=limite_minimo, value=0, step=1)
-                    q_bb = c2.number_input("BB", min_value=0, max_value=limite_minimo, value=0, step=1)
-                    q_ct = c3.number_input("CT", min_value=0, max_value=limite_minimo, value=0, step=1)
-                    q_tch = c4.number_input("TCH", min_value=0, max_value=limite_minimo, value=0, step=1)
-                    q_4ch = c5.number_input("4CH", min_value=0, max_value=limite_minimo, value=0, step=1)
+                    # Usamos est_hoy para recordar el número, si no hay, pone 0
+                    q_re = c1.number_input("RE", min_value=0, max_value=limite_minimo, value=int(est_hoy.get('re', 0)), step=1)
+                    q_bb = c2.number_input("BB", min_value=0, max_value=limite_minimo, value=int(est_hoy.get('bb', 0)), step=1)
+                    q_ct = c3.number_input("CT", min_value=0, max_value=limite_minimo, value=int(est_hoy.get('ct', 0)), step=1)
+                    q_tch = c4.number_input("TCH", min_value=0, max_value=limite_minimo, value=int(est_hoy.get('tch', 0)), step=1)
+                    q_4ch = c5.number_input("4CH", min_value=0, max_value=limite_minimo, value=int(est_hoy.get('4ch', 0)), step=1)
                     
                     total_asignados = q_re + q_bb + q_ct + q_tch + q_4ch
                     lugares_libres = limite_minimo - total_asignados
@@ -332,11 +345,32 @@ if menu == "🗺️ Distribución":
                                 cubeta = cubeta[:len(personas)]
                                 random.shuffle(cubeta)
                                 
+                                # Guardar en memoria de sesión
                                 asignaciones = {persona: cubeta[i] for i, persona in enumerate(personas)}
                                 st.session_state[f'dados_{region_sel}'] = asignaciones
-                                st.success("🎲 ¡Dados tirados! Ve a la pestaña 'Uno a Uno' para ver el resultado y ajustar si es necesario.")
-                        except:
-                            st.error("🚨 No se encontró una estrategia administrativa guardada en la nube.")
+                                st.success("🎲 ¡Dados tirados exitosamente!")
+                        except Exception as e:
+                            st.error(f"🚨 No se encontró una estrategia administrativa guardada en la nube. ({e})")
+                    
+                    # Si ya tiraron los dados, mostramos la radiografía y el mensaje
+                    if f'dados_{region_sel}' in st.session_state:
+                        st.markdown("### 📋 Vista Previa de Asignación")
+                        asignaciones_actuales = st.session_state[f'dados_{region_sel}']
+                        
+                        # Generamos una tabla HTML limpia y veloz (UX)
+                        html_tabla = "<table style='width:100%; border-collapse: collapse; background-color: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px;'><tr style='background-color: #9b2247; color: white;'><th style='padding: 10px; text-align: left;'>Verificador</th><th style='padding: 10px; text-align: left;'>Módulo Asignado</th></tr>"
+                        for persona, mod in asignaciones_actuales.items():
+                            html_tabla += f"<tr style='border-bottom: 1px solid #f1f3f5;'><td style='padding: 8px;'>👤 {persona}</td><td style='padding: 8px;'><b>{mod}</b></td></tr>"
+                        html_tabla += "</table>"
+                        st.markdown(html_tabla, unsafe_allow_html=True)
+                        
+                        # Generador del borrador de WhatsApp
+                        modulos_unicos = list(set(asignaciones_actuales.values()))
+                        mods_str = ", ".join(modulos_unicos[:-1]) + f" y {modulos_unicos[-1]}" if len(modulos_unicos) > 1 else modulos_unicos[0]
+                        
+                        borrador = f"Buenos días a tod@s 🍀\n\nEl día de hoy estaremos trabajando en los módulos de {mods_str} en la Región {region_sel}, por lo cual debemos atender las siguientes indicaciones:\n\nDebemos tomar en cuenta la administración de nuestros tiempos para alcanzar nuestras metas sin descuidar la calidad de nuestras verificaciones.\n\nQue tengan una excelente jornada 😉"
+                        st.text_area("📝 Borrador de Mensaje (Cópialo para WhatsApp):", value=borrador, height=250)
+
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 with tab_lotes:
