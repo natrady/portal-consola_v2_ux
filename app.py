@@ -191,13 +191,20 @@ if menu == "🗺️ Distribución":
                             "re": 0, "bb": 0, "ct": 0, "tch": 0, "4ch": 0, "resto": mod_todos
                         }
                         try:
-                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
-                            hoja_est.update_acell(1, 1, "Estrategia_JSON")
-                            hoja_est.update_acell(1, 2, json.dumps(estrategia))
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                            try:
+                                historico_json = json.loads(hoja_est.acell('B1').value)
+                            except:
+                                historico_json = {}
+                            
+                            historico_json[str(st.session_state.fecha_dist)] = estrategia
+                            
+                            hoja_est.update_acell('A1', 'Estrategias_JSON')
+                            hoja_est.update_acell('B1', json.dumps(historico_json))
                             st.success("✅ ¡Estrategia guardada en la nube!")
                             st.info(f"**Mensaje Oficial:**\n{estrategia['mensaje']}")
                         except Exception as e:
-                            st.error(f"🚨 Error: Crea una pestaña llamada 'Estrategia' en tu Google Sheets. Detalle: {e}")
+                            st.error(f"🚨 Error: Asegúrate de renombrar la pestaña a 'Distribución' en Sheets. Detalle: {e}")
                     
                 else:
                     st.markdown("**Posiciones Fijas (No exceder el límite operativo):**")
@@ -251,12 +258,19 @@ if menu == "🗺️ Distribución":
                             "re": q_re, "bb": q_bb, "ct": q_ct, "tch": q_tch, "4ch": q_4ch, "resto": resto_a
                         }
                         try:
-                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
-                            hoja_est.update_acell(1, 1, "Estrategia_JSON")
-                            hoja_est.update_acell(1, 2, json.dumps(estrategia))
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                            try:
+                                historico_json = json.loads(hoja_est.acell('B1').value)
+                            except:
+                                historico_json = {}
+                            
+                            historico_json[str(st.session_state.fecha_dist)] = estrategia
+                            
+                            hoja_est.update_acell('A1', 'Estrategias_JSON')
+                            hoja_est.update_acell('B1', json.dumps(historico_json))
                             st.success("✅ ¡Estrategia y mensaje guardados en la nube correctamente!")
                         except Exception as e:
-                            st.error(f"🚨 Error: Crea una pestaña llamada 'Estrategia' en tu Google Sheets. Detalle: {e}")
+                            st.error(f"🚨 Error: Asegúrate de renombrar la pestaña a 'Distribución' en Sheets. Detalle: {e}")
                         
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -264,10 +278,11 @@ if menu == "🗺️ Distribución":
         # MODOS 1 Y 2: COORDIS OPERATIVOS
         # ==========================================
         else:
-            # 1. Leemos el mensaje desde Google Sheets (Pestaña "Estrategia")
+            # 1. Leemos el mensaje desde Google Sheets (Pestaña "Distribución")
             try:
-                hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
-                est_guardada = json.loads(hoja_est.acell('B1').value)
+                hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                todas_estrategias = json.loads(hoja_est.acell('B1').value)
+                est_guardada = todas_estrategias.get(str(st.session_state.fecha_dist), {})
                 
                 if est_guardada.get("fecha") == str(st.session_state.fecha_dist):
                     st.info(f"📜 **Instrucción Administrativa para el {st.session_state.fecha_dist.strftime('%d/%m/%Y')}:**\n\n{est_guardada.get('mensaje')}")
@@ -294,11 +309,12 @@ if menu == "🗺️ Distribución":
                     if st.button("🎲 Tirar los Dados", type="primary", use_container_width=True):
                         try:
                             # Leer dados desde la nube también
-                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Estrategia")
-                            estrategia = json.loads(hoja_est.acell('B1').value)
+                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                            todas_estrategias = json.loads(hoja_est.acell('B1').value)
+                            estrategia = todas_estrategias.get(str(st.session_state.fecha_dist), {})
                                 
                             if estrategia.get("fecha") != str(st.session_state.fecha_dist):
-                                st.warning(f"⚠️ La estrategia en la nube es para el {estrategia.get('fecha')}, no para el {st.session_state.fecha_dist}.")
+                                st.warning(f"⚠️ No hay estrategia guardada para el {st.session_state.fecha_dist}.")
                             else:
                                 import random
                                 personas = df_region['Nombre'].tolist()
