@@ -4,6 +4,7 @@ import datetime
 import plotly.graph_objects as go
 import gspread
 from google.oauth2.service_account import Credentials
+import json
 
 # ==========================================
 # 0. AUTENTICACIÓN GOOGLE CLOUD
@@ -137,8 +138,6 @@ st.sidebar.info("Usuario prueba: Admin") # Luego lo conectamos al Anillo de Pode
 # ==========================================
 # 4. MÓDULOS (ESQUELETOS)
 # ==========================================
-import json # Asegúrate de que esta línea esté al principio de tu archivo si no la tienes
-
 if menu == "🗺️ Distribución":
     st.title("🗺️ Distribución Operativa")
     
@@ -191,7 +190,6 @@ if menu == "🗺️ Distribución":
                     
                 else:
                     st.markdown("**Posiciones Fijas (No exceder el límite operativo):**")
-                    # Usamos dos filas para no amontonar en celular
                     c1, c2, c3 = st.columns(3)
                     q_re = c1.number_input("RE", min_value=0, max_value=limite_minimo, value=0, step=1)
                     q_bb = c2.number_input("BB", min_value=0, max_value=limite_minimo, value=0, step=1)
@@ -222,7 +220,6 @@ if menu == "🗺️ Distribución":
                     else:
                         st.success(f"Configuración válida. Los {lugares_libres} verificadores restantes se asignarán a {resto_a}.")
                         
-                        # Generador de mensaje en balas
                         partes = []
                         if q_tch > 0: partes.append(f"* Tercer Check: {q_tch} persona(s)")
                         if q_re > 0: partes.append(f"* Revisión de Expedientes: {q_re} persona(s)")
@@ -231,7 +228,6 @@ if menu == "🗺️ Distribución":
                         if q_4ch > 0: partes.append(f"* Irregularidades 4CH: {q_4ch} persona(s)")
                         
                         texto_balas = "\n".join(partes)
-                        # Forzamos mayúsculas limpias en la variable
                         resto_texto = "RE" if resto_a == "RE" else resto_a
                         mensaje_default = f"Buenas tardes. La distribución para mañana por región es la siguiente:\n{texto_balas}\n* Y el resto en {resto_texto}."
                         
@@ -239,9 +235,8 @@ if menu == "🗺️ Distribución":
                         mensaje_editable = st.text_area("Texto del mensaje", value=mensaje_default, height=180, label_visibility="collapsed")
                 
                     if st.button("💾 Guardar Estrategia Oficial", type="primary", use_container_width=True, disabled=(total_asignados > limite_minimo)):
-                        # Guardamos un JSON simple para que las regiones lo lean
                         estrategia = {
-                            "fecha": str(fecha_sel),
+                            "fecha": str(st.session_state.fecha_dist),
                             "mensaje": mensaje_editable,
                             "re": q_re, "bb": q_bb, "ct": q_ct, "tch": q_tch, "4ch": q_4ch, "resto": resto_a
                         }
@@ -253,61 +248,15 @@ if menu == "🗺️ Distribución":
                             st.error(f"Error al guardar estrategia: {e}")
                         
                 st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Lógica excluyente para "El resto"
-                    opciones_resto = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH"]
-                    if q_re > 0 and "RE" in opciones_resto: opciones_resto.remove("RE")
-                    if q_bb > 0 and "BB" in opciones_resto: opciones_resto.remove("BB")
-                    if q_ct > 0 and "CT" in opciones_resto: opciones_resto.remove("CT")
-                    if q_tch > 0 and "TCH" in opciones_resto: opciones_resto.remove("TCH")
-                    
-                    st.markdown(f"**El resto ({lugares_libres} asignaciones dinámicas):**")
-                    resto_a = st.selectbox("🎯 Los demás se irán a:", opciones_resto)
-                    
-                    if total_asignados > limite_minimo:
-                        st.error(f"🚨 ¡Alto ahí! Asignaste {total_asignados} posiciones fijas, pero tu límite es {limite_minimo}. Reduce los números.")
-                    elif total_asignados == 0:
-                        st.warning(f"⚠️ Asignaste 0 fijos. Básicamente estás mandando a todos a {resto_a}.")
-                    else:
-                        st.success(f"Configuración válida. Los {lugares_libres} verificadores restantes se asignarán a {resto_a}.")
-                        
-                        # Generador de mensaje en balas
-                        partes = []
-                        if q_tch > 0: partes.append(f"* Tercer Check: {q_tch} persona(s)")
-                        if q_re > 0: partes.append(f"* Revisión de Expedientes: {q_re} persona(s)")
-                        if q_bb > 0: partes.append(f"* BaBien: {q_bb} persona(s)")
-                        if q_ct > 0: partes.append(f"* Centros de Trabajo: {q_ct} persona(s)")
-                        
-                        texto_balas = "\n".join(partes)
-                        mensaje_default = f"Buenas tardes. La distribución para mañana por región es la siguiente:\n{texto_balas}\n* Y el resto en {resto_a}."
-                        
-                        st.markdown("**Mensaje Oficial (puedes editarlo antes de guardar):**")
-                        mensaje_editable = st.text_area("Texto del mensaje", value=mensaje_default, height=180, label_visibility="collapsed")
-                
-                    if st.button("💾 Guardar Estrategia Oficial", type="primary", use_container_width=True, disabled=(total_asignados > limite_minimo)):
-                        # Aquí luego inyectaremos el JSON a Drive
-                        st.success("✅ ¡Estrategia y mensaje guardados correctamente!")
-                        
-                st.markdown('</div>', unsafe_allow_html=True)
 
         # ==========================================
         # MODOS 1 Y 2: COORDIS OPERATIVOS
         # ==========================================
         else:
-            # Mostramos el mensaje administrativo si existe y coincide con la fecha
-            try:
-                with open("estrategia_admin.json", "r") as f:
-                    est_guardada = json.load(f)
-                if est_guardada.get("fecha") == str(fecha_sel):
-                    st.info(f"📜 **Instrucción Administrativa para el {fecha_sel.strftime('%d/%m/%Y')}:**\n\n{est_guardada.get('mensaje')}")
-            except:
-                pass # Si no hay archivo, no mostramos nada
-
-            # Usamos Disponibles_Hoy en lugar de Disponibles
-            df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador') & (df_global['Disponibles_Hoy'] == 'Si')].copy()
+            df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
             
             if df_region.empty:
-                st.info(f"No hay verificadores disponibles en la región {region_sel} para esta fecha.")
+                st.info(f"No hay verificadores registrados en la región {region_sel}.")
             else:
                 st.subheader(f"👥 Equipo {region_sel} ({len(df_region)} personas)")
                 
@@ -316,10 +265,8 @@ if menu == "🗺️ Distribución":
                 with tab_manual:
                     st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
                     
+                    # Cargamos los estados de la región elegida
                     estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
-                    # Opciones operativas (excluyendo vacaciones e incapacidad)
-                    modulos_operativos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH", "Apoyo"]
-                    municipios_dummy = ["Capital", "Zona Norte", "Zona Sur", "Focalizado A", "Focalizado B"] # Catálogo temporal
                     
                     with st.form("form_distribucion"):
                         for index, row in df_region.iterrows():
@@ -329,12 +276,11 @@ if menu == "🗺️ Distribución":
                             with st.expander(f"👤 {nombre} | 🏷️ {modulo_actual}"):
                                 c1, c2 = st.columns(2)
                                 with c1:
-                                    idx_mod = modulos_operativos.index(modulo_actual) if modulo_actual in modulos_operativos else 0
-                                    st.selectbox("Módulo:", modulos_operativos, index=idx_mod, key=f"mod_{index}")
+                                    idx_mod = opciones_modulos.index(modulo_actual) if modulo_actual in opciones_modulos else 0
+                                    st.selectbox("Módulo:", opciones_modulos, index=idx_mod, key=f"mod_{index}")
                                     st.selectbox("Estado:", estados_disponibles, key=f"est_{index}")
                                 with c2:
-                                    st.multiselect("Municipios:", municipios_dummy, help="Catálogo final pendiente", key=f"mun_{index}")
-                                    st.text_input("Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, contactar a...")
+                                    st.text_input("Municipio / Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, Solo capital...")
                         
                         st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True)
 
