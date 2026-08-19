@@ -220,16 +220,11 @@ if menu == "🗺️ Distribución":
                 with tab_dados:
                     st.caption("Autocompletar usando la estrategia del Anillo de Poder.")
                     st.markdown('<div class="mobile-card border-tinto">AQUÍ LEEREMOS LA ESTRATEGIA AD Y REPARTIREMOS A LA GENTE</div>', unsafe_allow_html=True)
-with tab_dados:
-                st.caption("Autocompletar usando la estrategia del Anillo de Poder.")
-                st.markdown('<div class="mobile-card border-tinto">AQUÍ LEEREMOS LA ESTRATEGIA AD Y REPARTIREMOS A LA GENTE</div>', unsafe_allow_html=True)
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
     st.markdown("Revisa productividad, pausas y capturas de pantalla de tu equipo.")
     
-    with st.container():
-        st.markdown('<div class="mobile-card border-verde">AQUÍ CONSTRUIREMOS LOS FILTROS DE FECHA Y RENDIMIENTO INDIVIDUAL</div>', unsafe_allow_html=True)
     with st.container():
         st.markdown('<div class="mobile-card border-verde">AQUÍ CONSTRUIREMOS LOS FILTROS DE FECHA Y RENDIMIENTO INDIVIDUAL</div>', unsafe_allow_html=True)
 
