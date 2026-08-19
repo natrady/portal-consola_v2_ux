@@ -71,11 +71,17 @@ def cargar_personal():
     if not gc: return pd.DataFrame()
     try:
         hoja = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-        df = pd.DataFrame(hoja.get_all_records())
-        if df.empty: return df
+        # Extraemos crudo para burlar el error de gspread con columnas vacías
+        datos = hoja.get_all_values()
+        if len(datos) < 2: return pd.DataFrame()
+
+        df = pd.DataFrame(datos[1:], columns=datos[0])
         
-        # Blindaje: limpiar espacios nulos en las cabeceras
-        df.columns = df.columns.str.strip()
+        # Blindaje 1: Forzar texto, limpiar espacios y saltos de línea en cabeceras
+        df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
+        # Blindaje 2: Eliminar columnas vacías ('') y columnas duplicadas
+        df = df.loc[:, df.columns != '']
+        df = df.loc[:, ~df.columns.duplicated()]
         
         # Mapeo de niveles a roles legibles
         mapa_niveles = {0: "Coordinador", 2: "Verificador", 3: "Administrativo"}
