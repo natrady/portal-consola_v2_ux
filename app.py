@@ -97,11 +97,11 @@ def cargar_personal():
         df['Disponibles'] = df.apply(calc_disp, axis=1)
         return df
     except Exception as e:
-        st.error(f"Error leyendo Personal_DB: {e}")
+        # Extraemos el tipo de error exacto para que no vuelva a salir en blanco
+        st.error(f"🚨 Error leyendo Personal_DB: {type(e).__name__} - {str(e)}")
         return pd.DataFrame()
 
 df_global = cargar_personal()
-
 # ==========================================
 # 3. BARRA LATERAL (NAVEGACIÓN)
 # ==========================================
