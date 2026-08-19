@@ -221,7 +221,8 @@ if menu == "🗺️ Distribución":
                     st.caption("Autocompletar usando la estrategia del Anillo de Poder.")
                     st.markdown('<div class="mobile-card border-tinto">AQUÍ LEEREMOS LA ESTRATEGIA AD Y REPARTIREMOS A LA GENTE</div>', unsafe_allow_html=True)
 
-elif menu == "📊 Monitoreo de Equipo":                for index, row in df_region.iterrows():
+elif menu == "📊 Monitoreo de Equipo":                
+                    for index, row in df_region.iterrows():
                     nombre = row.get('Nombre', 'Sin Nombre')
                     modulo_actual = row.get('Módulo', 'RE')
                     
