@@ -334,7 +334,18 @@ if menu == "🗺️ Distribución":
                             real = Counter(dict_dados.values())
                             
                             if any(ideal[mod] != real.get(mod, 0) for mod in ideal.keys()):
-                                st.warning("⚠️ **Advertencia:** La distribución actual descuadra con la estrategia administrativa. Sugerimos equilibrar.")
+                                st.warning("⚠️ **Advertencia:** La distribución actual descuadra con la estrategia administrativa.")
+                                
+                                html_balance = "<table style='width:100%; font-size:14px; text-align:center; border-collapse: collapse; margin-bottom:15px;'><tr style='border-bottom: 2px solid #e9ecef; color:#161a1d;'><th>Módulo</th><th>Indicados</th><th>Asignados</th><th>Estatus</th></tr>"
+                                for mod, meta in ideal.items():
+                                    # Solo mostrar si hay meta indicada o si le asignaron gente por error
+                                    if meta > 0 or real.get(mod, 0) > 0: 
+                                        asignados = real.get(mod, 0)
+                                        icono = "✅" if asignados == meta else "❌"
+                                        color = "#1e5b4f" if asignados == meta else "#9b2247"
+                                        html_balance += f"<tr style='color: {color}; border-bottom: 1px solid #f8f9fa;'><td><b>{mod}</b></td><td>{meta}</td><td>{asignados}</td><td>{icono}</td></tr>"
+                                html_balance += "</table>"
+                                st.markdown(html_balance, unsafe_allow_html=True)
                     except:
                         pass
                 
@@ -427,7 +438,26 @@ if menu == "🗺️ Distribución":
 
                 with tab_lotes:
                     st.caption("Asigna a múltiples verificadores al mismo tiempo.")
-                    st.markdown('<div class="mobile-card border-verde">AQUÍ PONDREMOS LOS SELECTORES MÚLTIPLES</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="mobile-card border-verde">', unsafe_allow_html=True)
+                    
+                    mod_lote = st.selectbox("1️⃣ Selecciona el Módulo destino:", modulos_operativos, key="lote_mod")
+                    
+                    # Filtramos a la gente que NO tiene este módulo asignado para limpiar el multiselect
+                    nombres_region = df_region['Nombre'].tolist()
+                    gente_disponible = [n for n in nombres_region if dict_dados.get(n, "") != mod_lote]
+                    
+                    seleccionados = st.multiselect("2️⃣ Elige a los verificadores:", gente_disponible, key="lote_gente")
+                    
+                    if st.button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
+                        if seleccionados:
+                            for persona in seleccionados:
+                                dict_dados[persona] = mod_lote
+                            st.session_state[f'dados_{region_sel}'] = dict_dados
+                            st.rerun() # Reiniciamos para refrescar la validación y el formulario
+                        else:
+                            st.error("Debes seleccionar al menos a un verificador.")
+                            
+                    st.markdown('</div>', unsafe_allow_html=True)
 
                 with tab_manual:
                     st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
