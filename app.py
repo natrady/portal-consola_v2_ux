@@ -93,6 +93,11 @@ def cargar_personal():
         df = df.loc[:, df.columns != '']
         df = df.loc[:, ~df.columns.duplicated()]
         
+        # Blindaje 3: Limpiar Región (Ss -> SS)
+        if 'Región' in df.columns:
+            df['Región'] = df['Región'].astype(str).str.strip()
+            df['Región'] = df['Región'].replace({'Ss': 'SS', 'Sur Sureste': 'SS'})
+        
         # Mapeo de niveles a roles legibles
         mapa_niveles = {0: "Coordinador", 2: "Verificador", 3: "Administrativo"}
         df['Rol'] = pd.to_numeric(df.get('Nivel', 2), errors='coerce').map(mapa_niveles).fillna("Desconocido")
@@ -118,6 +123,20 @@ def cargar_personal():
         return pd.DataFrame()
 
 df_global = cargar_personal()
+
+@st.cache_data(ttl=60, show_spinner=False)
+def leer_estrategias_nube():
+    if not gc: return {}, {}
+    try:
+        hoja = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+        try: est = json.loads(hoja.acell('B1').value)
+        except: est = {}
+        try: plant = json.loads(hoja.acell('B2').value)
+        except: plant = {}
+        return est, plant
+    except:
+        return {}, {}
+
 # ==========================================
 # 3. BARRA LATERAL (NAVEGACIÓN)
 # ==========================================
@@ -181,12 +200,9 @@ if menu == "🗺️ Distribución":
                 cols_disp[i].metric(reg, qty)
             st.caption(f"💡 Tu tope máximo para posiciones fijas es **{limite_minimo}** (la región más pequeña).")
             
-            # Memoria: Intentamos leer si ya hay una estrategia guardada para pre-llenar los números
-            try:
-                hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                est_hoy = json.loads(hoja_est.acell('B1').value).get(str(st.session_state.fecha_dist), {})
-            except:
-                est_hoy = {}
+            # Memoria: Leemos desde la caché para no bombardear a Google
+            estrategias_bd, _ = leer_estrategias_nube()
+            est_hoy = estrategias_bd.get(str(st.session_state.fecha_dist), {})
                 
             tipo_estrategia = st.radio("Tipo de Estrategia:", ["Asignar a TODOS a un solo módulo", "Repartir posiciones fijas"], horizontal=True)
             
@@ -204,15 +220,12 @@ if menu == "🗺️ Distribución":
                         }
                         try:
                             hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                            try:
-                                historico_json = json.loads(hoja_est.acell('B1').value)
-                            except:
-                                historico_json = {}
-                            
-                            historico_json[str(st.session_state.fecha_dist)] = estrategia
+                            estrategias_bd, _ = leer_estrategias_nube()
+                            estrategias_bd[str(st.session_state.fecha_dist)] = estrategia
                             
                             hoja_est.update_acell('A1', 'Estrategias_JSON')
-                            hoja_est.update_acell('B1', json.dumps(historico_json))
+                            hoja_est.update_acell('B1', json.dumps(estrategias_bd))
+                            leer_estrategias_nube.clear() # Limpiamos caché
                             st.success("✅ ¡Estrategia guardada en la nube!")
                             st.info(f"**Mensaje Oficial:**\n{estrategia['mensaje']}")
                         except Exception as e:
@@ -272,15 +285,12 @@ if menu == "🗺️ Distribución":
                         }
                         try:
                             hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                            try:
-                                historico_json = json.loads(hoja_est.acell('B1').value)
-                            except:
-                                historico_json = {}
-                            
-                            historico_json[str(st.session_state.fecha_dist)] = estrategia
+                            estrategias_bd, _ = leer_estrategias_nube()
+                            estrategias_bd[str(st.session_state.fecha_dist)] = estrategia
                             
                             hoja_est.update_acell('A1', 'Estrategias_JSON')
-                            hoja_est.update_acell('B1', json.dumps(historico_json))
+                            hoja_est.update_acell('B1', json.dumps(estrategias_bd))
+                            leer_estrategias_nube.clear() # Limpiamos caché
                             st.success("✅ ¡Estrategia y mensaje guardados en la nube correctamente!")
                         except Exception as e:
                             st.error(f"🚨 Error: Asegúrate de renombrar la pestaña a 'Distribución' en Sheets. Detalle: {e}")
@@ -291,16 +301,12 @@ if menu == "🗺️ Distribución":
         # MODOS 1 Y 2: COORDIS OPERATIVOS
         # ==========================================
         else:
-            # 1. Leemos el mensaje desde Google Sheets (Pestaña "Distribución")
-            try:
-                hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                todas_estrategias = json.loads(hoja_est.acell('B1').value)
-                est_guardada = todas_estrategias.get(str(st.session_state.fecha_dist), {})
-                
-                if est_guardada.get("fecha") == str(st.session_state.fecha_dist):
-                    st.info(f"📜 **Instrucción Administrativa para el {st.session_state.fecha_dist.strftime('%d/%m/%Y')}:**\n\n{est_guardada.get('mensaje')}")
-            except:
-                pass # Si no hay archivo en la nube, no mostramos nada
+            # 1. Leemos caché (0 llamadas a la API si ya se leyó hace poco)
+            estrategias_bd, plantillas_bd = leer_estrategias_nube()
+            est_guardada = estrategias_bd.get(str(st.session_state.fecha_dist), {})
+            
+            if est_guardada.get("fecha") == str(st.session_state.fecha_dist):
+                st.info(f"📜 **Instrucción Administrativa para el {st.session_state.fecha_dist.strftime('%d/%m/%Y')}:**\n\n{est_guardada.get('mensaje')}")
 
             # 2. Filtramos el equipo usando Disponibles_Hoy
             df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador') & (df_global['Disponibles_Hoy'] == 'Si')].copy()
@@ -315,8 +321,7 @@ if menu == "🗺️ Distribución":
                 # Validación matemática contra la estrategia global (Visible para todas las pestañas)
                 if dict_dados:
                     try:
-                        hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                        estrategia = json.loads(hoja_est.acell('B1').value).get(str(st.session_state.fecha_dist), {})
+                        estrategia = estrategias_bd.get(str(st.session_state.fecha_dist), {})
                         
                         if estrategia:
                             fijos = sum([estrategia.get('re',0), estrategia.get('bb',0), estrategia.get('ct',0), estrategia.get('tch',0), estrategia.get('4ch',0)])
@@ -344,10 +349,7 @@ if menu == "🗺️ Distribución":
                     st.markdown('<div class="mobile-card border-tinto">', unsafe_allow_html=True)
                     if st.button("🎲 Tirar los Dados", type="primary", use_container_width=True):
                         try:
-                            # Leer dados desde la nube también
-                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                            todas_estrategias = json.loads(hoja_est.acell('B1').value)
-                            estrategia = todas_estrategias.get(str(st.session_state.fecha_dist), {})
+                            estrategia = estrategias_bd.get(str(st.session_state.fecha_dist), {})
                                 
                             if estrategia.get("fecha") != str(st.session_state.fecha_dist):
                                 st.warning(f"⚠️ No hay estrategia guardada para el {st.session_state.fecha_dist}.")
@@ -368,12 +370,11 @@ if menu == "🗺️ Distribución":
                                 cubeta = cubeta[:len(personas)]
                                 random.shuffle(cubeta)
                                 
-                                # Guardar en memoria de sesión
                                 asignaciones = {persona: cubeta[i] for i, persona in enumerate(personas)}
                                 st.session_state[f'dados_{region_sel}'] = asignaciones
                                 st.success("🎲 ¡Dados tirados exitosamente!")
                         except Exception as e:
-                            st.error(f"🚨 No se encontró una estrategia administrativa guardada en la nube. ({e})")
+                            st.error(f"🚨 Error tirando los dados. ({e})")
                     
                     # Si ya tiraron los dados, mostramos la radiografía y el mensaje
                     if f'dados_{region_sel}' in st.session_state:
@@ -391,22 +392,12 @@ if menu == "🗺️ Distribución":
                         html_tabla += "</table>"
                         st.markdown(html_tabla, unsafe_allow_html=True)
                         
-                        # Lógica del borrador dinámico de WhatsApp
+                        # Lógica del borrador dinámico de WhatsApp usando CACHÉ
                         modulos_unicos = list(set(asignaciones_actuales.values()))
                         mods_str = ", ".join(modulos_unicos[:-1]) + f" y {modulos_unicos[-1]}" if len(modulos_unicos) > 1 else modulos_unicos[0]
                         
-                        # Leer plantillas desde B2 en Sheets (manejo defensivo)
-                        try:
-                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                            try:
-                                plantillas_json = json.loads(hoja_est.acell('B2').value)
-                            except:
-                                plantillas_json = {}
-                        except:
-                            plantillas_json = {}
-                            
                         plantilla_default = f"Buenos días a tod@s 🍀\n\nEl día de hoy estaremos trabajando en los módulos de [MODULOS] en la Región {region_sel}.\n\nQue tengan una excelente jornada 😉"
-                        plantilla_region = plantillas_json.get(region_sel, plantilla_default)
+                        plantilla_region = plantillas_bd.get(region_sel, plantilla_default)
                         
                         # Reemplazamos el comodín por los módulos reales de la tirada
                         borrador_final = plantilla_region.replace("[MODULOS]", mods_str)
@@ -421,11 +412,12 @@ if menu == "🗺️ Distribución":
                             nueva_plantilla = st.text_area("Edita el formato para tu región:", value=plantilla_region, height=180, key=f"template_{region_sel}")
                             
                             if st.button("💾 Guardar como mi machote default", use_container_width=True):
-                                plantillas_json[region_sel] = nueva_plantilla
+                                plantillas_bd[region_sel] = nueva_plantilla
                                 try:
                                     hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
                                     hoja_est.update_acell('A2', 'Plantillas_Mensajes')
-                                    hoja_est.update_acell('B2', json.dumps(plantillas_json))
+                                    hoja_est.update_acell('B2', json.dumps(plantillas_bd))
+                                    leer_estrategias_nube.clear() # Limpiamos caché
                                     st.success("✅ ¡Plantilla actualizada! Se usará para tus próximas distribuciones.")
                                     st.rerun() # Recargamos para que el cambio se vea inmediato
                                 except Exception as e:
