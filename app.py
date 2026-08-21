@@ -310,6 +310,29 @@ if menu == "🗺️ Distribución":
             else:
                 st.subheader(f"👥 Equipo {region_sel} ({len(df_region)} personas)")
                 
+                dict_dados = st.session_state.get(f'dados_{region_sel}', {})
+                
+                # Validación matemática contra la estrategia global (Visible para todas las pestañas)
+                if dict_dados:
+                    try:
+                        hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                        estrategia = json.loads(hoja_est.acell('B1').value).get(str(st.session_state.fecha_dist), {})
+                        
+                        if estrategia:
+                            fijos = sum([estrategia.get('re',0), estrategia.get('bb',0), estrategia.get('ct',0), estrategia.get('tch',0), estrategia.get('4ch',0)])
+                            libres = max(0, len(df_region) - fijos)
+                            ideal = {"RE": estrategia.get('re',0), "BB": estrategia.get('bb',0), "CT": estrategia.get('ct',0), "TCH": estrategia.get('tch',0), "Irregularidades 4CH": estrategia.get('4ch',0), "Actividad Especial": 0, "Apoyo": 0}
+                            resto_mod = estrategia.get('resto', 'RE')
+                            if resto_mod in ideal: ideal[resto_mod] += libres
+                                
+                            from collections import Counter
+                            real = Counter(dict_dados.values())
+                            
+                            if any(ideal[mod] != real.get(mod, 0) for mod in ideal.keys()):
+                                st.warning("⚠️ **Advertencia:** La distribución actual descuadra con la estrategia administrativa. Sugerimos equilibrar.")
+                    except:
+                        pass
+                
                 tab_dados, tab_lotes, tab_manual = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno"])
                 
                 estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
@@ -357,9 +380,12 @@ if menu == "🗺️ Distribución":
                         st.markdown("### 📋 Vista Previa de Asignación")
                         asignaciones_actuales = st.session_state[f'dados_{region_sel}']
                         
+                        # ORDENAMIENTO: Primero por Módulo [1] y luego por Nombre de verificador [0] alfabéticamente
+                        asignaciones_ordenadas = sorted(asignaciones_actuales.items(), key=lambda item: (item[1], item[0]))
+                        
                         # Generamos una tabla HTML con UI pulida
                         html_tabla = "<table style='width:100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-family: sans-serif; font-size: 14px; margin-bottom: 20px;'><tr style='background-color: #9b2247; color: white; text-align: left;'><th style='padding: 12px 15px;'>Verificador</th><th style='padding: 12px 15px;'>Módulo Asignado</th></tr>"
-                        for i, (persona, mod) in enumerate(asignaciones_actuales.items()):
+                        for i, (persona, mod) in enumerate(asignaciones_ordenadas):
                             bg_color = "#f8f9fa" if i % 2 == 0 else "#ffffff"
                             html_tabla += f"<tr style='background-color: {bg_color}; border-bottom: 1px solid #e9ecef;'><td style='padding: 10px 15px; color: #343a40;'>👤 {persona}</td><td style='padding: 10px 15px; color: #1e5b4f; font-weight: 600;'>{mod}</td></tr>"
                         html_tabla += "</table>"
@@ -414,29 +440,7 @@ if menu == "🗺️ Distribución":
                 with tab_manual:
                     st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
                     
-                    dict_dados = st.session_state.get(f'dados_{region_sel}', {})
-                    
-                    # Validación matemática contra la estrategia global
-                    if dict_dados:
-                        try:
-                            hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                            estrategia = json.loads(hoja_est.acell('B1').value).get(str(st.session_state.fecha_dist), {})
-                            
-                            if estrategia:
-                                fijos = sum([estrategia.get('re',0), estrategia.get('bb',0), estrategia.get('ct',0), estrategia.get('tch',0), estrategia.get('4ch',0)])
-                                libres = max(0, len(df_region) - fijos)
-                                ideal = {"RE": estrategia.get('re',0), "BB": estrategia.get('bb',0), "CT": estrategia.get('ct',0), "TCH": estrategia.get('tch',0), "Irregularidades 4CH": estrategia.get('4ch',0), "Actividad Especial": 0, "Apoyo": 0}
-                                resto_mod = estrategia.get('resto', 'RE')
-                                if resto_mod in ideal: ideal[resto_mod] += libres
-                                    
-                                from collections import Counter
-                                real = Counter(dict_dados.values())
-                                
-                                if any(ideal[mod] != real.get(mod, 0) for mod in ideal.keys()):
-                                    st.warning("⚠️ **Advertencia:** La distribución actual descuadra con la estrategia administrativa. Sugerimos equilibrar.")
-                        except:
-                            pass
-                    
+                    # dict_dados ya lo leemos arriba, pero el form lo usa directo desde session_state
                     with st.form("form_distribucion"):
                         for index, row in df_region.iterrows():
                             nombre = row.get('Nombre', 'Sin Nombre')
