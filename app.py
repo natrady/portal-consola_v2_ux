@@ -306,7 +306,8 @@ if menu == "🗺️ Distribución":
             est_guardada = estrategias_bd.get(str(st.session_state.fecha_dist), {})
             
             if est_guardada.get("fecha") == str(st.session_state.fecha_dist):
-                st.info(f"📜 **Instrucción Administrativa para el {st.session_state.fecha_dist.strftime('%d/%m/%Y')}:**\n\n{est_guardada.get('mensaje')}")
+                with st.expander(f"📜 Instrucción Administrativa para el {st.session_state.fecha_dist.strftime('%d/%m/%Y')}", expanded=False):
+                    st.info(est_guardada.get('mensaje'))
 
             # 2. Filtramos el equipo usando Disponibles_Hoy
             df_region = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador') & (df_global['Disponibles_Hoy'] == 'Si')].copy()
@@ -334,18 +335,16 @@ if menu == "🗺️ Distribución":
                             real = Counter(dict_dados.values())
                             
                             if any(ideal[mod] != real.get(mod, 0) for mod in ideal.keys()):
-                                st.warning("⚠️ **Advertencia:** La distribución actual descuadra con la estrategia administrativa.")
-                                
-                                html_balance = "<table style='width:100%; font-size:14px; text-align:center; border-collapse: collapse; margin-bottom:15px;'><tr style='border-bottom: 2px solid #e9ecef; color:#161a1d;'><th>Módulo</th><th>Indicados</th><th>Asignados</th><th>Estatus</th></tr>"
-                                for mod, meta in ideal.items():
-                                    # Solo mostrar si hay meta indicada o si le asignaron gente por error
-                                    if meta > 0 or real.get(mod, 0) > 0: 
-                                        asignados = real.get(mod, 0)
-                                        icono = "✅" if asignados == meta else "❌"
-                                        color = "#1e5b4f" if asignados == meta else "#9b2247"
-                                        html_balance += f"<tr style='color: {color}; border-bottom: 1px solid #f8f9fa;'><td><b>{mod}</b></td><td>{meta}</td><td>{asignados}</td><td>{icono}</td></tr>"
-                                html_balance += "</table>"
-                                st.markdown(html_balance, unsafe_allow_html=True)
+                                with st.expander("⚠️ La distribución actual descuadra con la estrategia administrativa (Clic para ver detalles)", expanded=True):
+                                    html_balance = "<table style='width:100%; font-size:14px; text-align:center; border-collapse: collapse; margin-bottom:15px;'><tr style='border-bottom: 2px solid #e9ecef; color:#161a1d;'><th>Módulo</th><th>Indicados</th><th>Asignados</th><th>Estatus</th></tr>"
+                                    for mod, meta in ideal.items():
+                                        if meta > 0 or real.get(mod, 0) > 0: 
+                                            asignados = real.get(mod, 0)
+                                            icono = "✅" if asignados == meta else "❌"
+                                            color = "#1e5b4f" if asignados == meta else "#9b2247"
+                                            html_balance += f"<tr style='color: {color}; border-bottom: 1px solid #f8f9fa;'><td><b>{mod}</b></td><td>{meta}</td><td>{asignados}</td><td>{icono}</td></tr>"
+                                    html_balance += "</table>"
+                                    st.markdown(html_balance, unsafe_allow_html=True)
                     except:
                         pass
                 
@@ -383,7 +382,15 @@ if menu == "🗺️ Distribución":
                                 
                                 asignaciones = {persona: cubeta[i] for i, persona in enumerate(personas)}
                                 st.session_state[f'dados_{region_sel}'] = asignaciones
+                                
+                                # CRÍTICO: Sobrescribir las llaves de los selectores para forzar actualización
+                                for idx, row_p in df_region.iterrows():
+                                    nombre_p = row_p.get('Nombre')
+                                    if f"mod_{idx}" in st.session_state:
+                                        st.session_state[f"mod_{idx}"] = asignaciones.get(nombre_p, "RE")
+                                
                                 st.success("🎲 ¡Dados tirados exitosamente!")
+                                st.rerun() # Reiniciamos forzosamente para repintar el Uno a Uno
                         except Exception as e:
                             st.error(f"🚨 Error tirando los dados. ({e})")
                     
@@ -453,6 +460,13 @@ if menu == "🗺️ Distribución":
                             for persona in seleccionados:
                                 dict_dados[persona] = mod_lote
                             st.session_state[f'dados_{region_sel}'] = dict_dados
+                            
+                            # CRÍTICO: Sobrescribir las llaves de los selectores manuales
+                            for idx, row_p in df_region.iterrows():
+                                nombre_p = row_p.get('Nombre')
+                                if nombre_p in seleccionados and f"mod_{idx}" in st.session_state:
+                                    st.session_state[f"mod_{idx}"] = mod_lote
+                                    
                             st.rerun() # Reiniciamos para refrescar la validación y el formulario
                         else:
                             st.error("Debes seleccionar al menos a un verificador.")
