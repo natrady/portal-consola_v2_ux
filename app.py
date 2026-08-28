@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-mport requests #<-- Librería
+import requests #<-- Librería
 # ==========================================
 # 0. AUTENTICACIÓN GOOGLE CLOUD
 # ==========================================
