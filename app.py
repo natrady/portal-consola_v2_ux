@@ -500,14 +500,81 @@ if menu == "🗺️ Distribución":
                                     st.text_input("Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, contactar a...")
                         
                         if st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True):
-                            # Recolectar lo que se movió a mano y guardarlo en memoria
+                            # 1. Recolectar lo que se movió a mano y guardarlo en memoria
                             nueva_dist = {}
                             for index, row in df_region.iterrows():
                                 nombre = row.get('Nombre', 'Sin Nombre')
                                 nueva_dist[nombre] = st.session_state[f"mod_{index}"]
                             
                             st.session_state[f'dados_{region_sel}'] = nueva_dist
+                            
+                            # 2. Empujar cambios a la pestaña 'Personal' (Batch Update Anti-DDoS)
+                            try:
+                                hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+                                matriz_cruda = hoja_personal.get_all_values()
+                                
+                                if len(matriz_cruda) > 0:
+                                    cabeceras = [str(c).strip() for c in matriz_cruda[0]]
+                                    idx_nom = cabeceras.index('Nombre')
+                                    idx_mod = cabeceras.index('Módulo')
+                                    
+                                    # Actualizamos la matriz localmente
+                                    for num_fila, fila in enumerate(matriz_cruda):
+                                        if num_fila == 0: continue
+                                        if len(fila) > idx_nom and fila[idx_nom] in nueva_dist:
+                                            # Rellenamos celdas vacías si la fila está incompleta
+                                            while len(fila) <= idx_mod: fila.append("")
+                                            fila[idx_mod] = nueva_dist[fila[idx_nom]]
+                                    
+                                    # Empujamos toda la tabla de regreso en un solo golpe
+                                    hoja_personal.update(values=matriz_cruda, range_name="A1")
+                                    st.success("✅ ¡Distribución guardada oficialmente en la base de datos!")
+                            except Exception as e:
+                                st.error(f"🚨 Error de conexión al guardar en Sheets: {e}")
+
                             st.rerun() # Reiniciamos para que la tabla y el mensaje lean los nuevos cambios
+
+elif menu == "💍 Anillo de Poder":
+    st.title("💍 Anillo de Poder (Accesos)")
+    st.markdown("Control maestro de usuarios, niveles y permisos de la aplicación.")
+    
+    try:
+        hoja_usuarios = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Usuarios_App")
+        datos_usuarios = hoja_usuarios.get_all_values()
+        
+        if len(datos_usuarios) > 0:
+            df_usuarios = pd.DataFrame(datos_usuarios[1:], columns=datos_usuarios[0])
+            
+            # Configuramos las columnas para el editor interactivo (UX)
+            config_columnas = {
+                "Correo": st.column_config.TextColumn("Correo (Gmail)", required=True),
+                "Nombre": st.column_config.TextColumn("Nombre completo", required=True),
+                "Nivel": st.column_config.SelectboxColumn("Nivel", options=["Absoluto", "Admin", "Coordinador", "Verificador"], required=True),
+                "Módulos": st.column_config.TextColumn("Módulos (Separados por coma)"),
+                "Estatus": st.column_config.SelectboxColumn("Estatus", options=["Activo", "Baja"], required=True)
+            }
+            
+            with st.container():
+                st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
+                st.caption("Edita directamente la tabla, agrega o elimina filas y presiona Guardar.")
+                
+                # Editor interactivo
+                df_editado = st.data_editor(df_usuarios, column_config=config_columnas, num_rows="dynamic", use_container_width=True)
+                
+                if st.button("💾 Guardar Cambios en Usuarios", type="primary", use_container_width=True):
+                    # Blindaje: Limpiamos nulos y aseguramos que todo sea texto
+                    df_editado = df_editado.fillna("")
+                    nuevos_valores = [df_editado.columns.tolist()] + df_editado.values.tolist()
+                    
+                    hoja_usuarios.clear() # Limpiamos hoja antes de reescribir para evitar basura
+                    hoja_usuarios.update(values=nuevos_valores, range_name="A1")
+                    st.success("✅ Catálogo de usuarios actualizado exitosamente.")
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.warning("⚠️ La pestaña 'Usuarios_App' está vacía. Agrega los encabezados primero.")
+    except Exception as e:
+        st.error(f"🚨 Error: Asegúrate de crear la pestaña 'Usuarios_App' en tu Google Sheets. Detalle: {e}")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
