@@ -140,16 +140,17 @@ def leer_estrategias_nube():
 # ==========================================
 # 3. BARRA LATERAL (NAVEGACIÓN)
 # ==========================================
-st.sidebar.title("🎭 Consola 2.0")
-st.sidebar.caption("Modo Coordinador / Admin")
-st.sidebar.divider()
-
-# Simplificamos el menú para ir construyendo uno por uno
-menu = st.sidebar.radio("Módulos:", [
-    "🗺️ Distribución", 
-    "📊 Monitoreo de Equipo", 
-    "📈 Tablero Gerencial"
-])
+with st.sidebar:
+    st.title("🎭 Consola 2.0")
+    st.caption("Modo Coordinador / Admin")
+    st.divider()
+    
+    menu = st.radio("Módulos:", [
+        "🗺️ Distribución",
+        "📊 Monitoreo de Equipo",
+        "📈 Tablero Gerencial",
+        "💍 Anillo de Poder"
+    ])
 
 st.sidebar.divider()
 st.sidebar.info("Usuario prueba: Admin") # Luego lo conectamos al Anillo de Poder
