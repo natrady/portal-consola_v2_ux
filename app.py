@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-
+mport requests #<-- Librería
 # ==========================================
 # 0. AUTENTICACIÓN GOOGLE CLOUD
 # ==========================================
@@ -138,11 +138,51 @@ def leer_estrategias_nube():
         return {}, {}
 
 # ==========================================
+# 2.5. CADENERO (LOGIN CON GOOGLE)
+# ==========================================
+if 'usuario_correo' not in st.session_state:
+    # 1. Si regresamos de Google, checamos si traemos un código en la URL
+    if 'code' in st.query_params:
+        try:
+            code = st.query_params['code']
+            token_url = "https://oauth2.googleapis.com/token"
+            data = {
+                "code": code,
+                "client_id": st.secrets["google_oauth"]["client_id"],
+                "client_secret": st.secrets["google_oauth"]["client_secret"],
+                "redirect_uri": st.secrets["google_oauth"]["redirect_uri"],
+                "grant_type": "authorization_code",
+            }
+            res = requests.post(token_url, data=data)
+            if res.status_code == 200:
+                access_token = res.json().get("access_token")
+                user_res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
+                if user_res.status_code == 200:
+                    st.session_state.usuario_correo = user_res.json().get("email")
+                    st.session_state.usuario_nombre = user_res.json().get("name", "Usuario")
+                    st.query_params.clear() # Limpiamos la URL para no ciclar la app
+                    st.rerun()
+        except Exception as e:
+            st.error(f"🚨 Error de conexión con Google: {e}")
+    
+    # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
+    if 'usuario_correo' not in st.session_state:
+        st.markdown('<div style="text-align: center; margin-top: 50px;">', unsafe_allow_html=True)
+        st.title("🔒 Portal Consola 2.0")
+        st.markdown("Acceso restringido. Por favor, identifícate con tu cuenta autorizada.")
+        
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={st.secrets['google_oauth']['client_id']}&redirect_uri={st.secrets['google_oauth']['redirect_uri']}&response_type=code&scope=openid%20email%20profile&prompt=select_account"
+        
+        st.markdown(f'<br><a href="{auth_url}" target="_self" style="text-decoration: none;"><button style="background-color: #1e5b4f; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🔑 Entrar con Google</button></a>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ. 
+
+# ==========================================
 # 3. BARRA LATERAL (NAVEGACIÓN)
 # ==========================================
 with st.sidebar:
     st.title("🎭 Consola 2.0")
-    st.caption("Modo Coordinador / Admin")
+    st.caption(f"👤 Hola, {st.session_state.usuario_nombre}")
     st.divider()
     
     menu = st.radio("Módulos:", [
