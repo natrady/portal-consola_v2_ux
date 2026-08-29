@@ -192,11 +192,72 @@ with st.sidebar:
         "💍 Anillo de Poder"
     ])
 
-st.sidebar.divider()
-st.sidebar.info("Usuario prueba: Admin") # Luego lo conectamos al Anillo de Poder
+# ==========================================
+# 4. LÓGICA PRINCIPAL POR MÓDULO
+DESPUÉS:
+
+Python
+        st.markdown(f'<br><a href="{auth_url}" target="_self" style="text-decoration: none;"><button style="background-color: #1e5b4f; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🔑 Entrar con Google</button></a>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ. 
+
+@st.cache_data(ttl=300, show_spinner=False)
+def obtener_permisos(correo):
+    if not gc: return None, None
+    try:
+        hoja = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Usuarios_App")
+        datos = hoja.get_all_records()
+        for fila in datos:
+            if str(fila.get("Correo", "")).strip().lower() == correo.lower() and fila.get("Estatus", "") == "Activo":
+                return fila.get("Nivel", ""), fila.get("Módulos", "")
+        return None, None
+    except:
+        return None, None
 
 # ==========================================
-# 4. MÓDULOS (ESQUELETOS)
+# 3. BARRA LATERAL (NAVEGACIÓN)
+# ==========================================
+with st.sidebar:
+    st.title("🎭 Consola 2.0")
+    st.caption(f"👤 Hola, {st.session_state.usuario_nombre}")
+    
+    # Validar permisos en base de datos
+    nivel_user, modulos_user = obtener_permisos(st.session_state.usuario_correo)
+    
+    if not nivel_user:
+        st.error("🚫 Acceso denegado. Tu correo no está registrado o estás inactivo.")
+        if st.button("Cerrar Sesión"):
+            st.session_state.clear()
+            st.rerun()
+        st.stop()
+        
+    st.caption(f"🛡️ Nivel: {nivel_user}")
+    st.divider()
+    
+    # Construcción dinámica del menú según permisos (Programación defensiva)
+    opciones_menu = []
+    if nivel_user in ["Absoluto", "Admin"] or "Todos" in modulos_user or "Distribución" in modulos_user:
+        opciones_menu.append("🗺️ Distribución")
+    if nivel_user in ["Absoluto", "Admin"] or "Todos" in modulos_user or "Monitoreo" in modulos_user:
+        opciones_menu.append("📊 Monitoreo de Equipo")
+    if nivel_user in ["Absoluto", "Admin"] or "Todos" in modulos_user or "Tablero" in modulos_user:
+        opciones_menu.append("📈 Tablero Gerencial")
+    if nivel_user == "Absoluto":
+        opciones_menu.append("💍 Anillo de Poder")
+        
+    if not opciones_menu:
+        st.warning("⚠️ Tu usuario no tiene módulos asignados.")
+        st.stop()
+        
+    menu = st.radio("Módulos:", opciones_menu)
+    
+    st.divider()
+    if st.button("🚪 Salir", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+# ==========================================
+# 4. LÓGICA PRINCIPAL POR MÓDULO
 # ==========================================
 if menu == "🗺️ Distribución":
     st.title("🗺️ Distribución Operativa")
