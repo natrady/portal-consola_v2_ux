@@ -177,30 +177,6 @@ if 'usuario_correo' not in st.session_state:
         st.markdown('</div>', unsafe_allow_html=True)
         st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ. 
 
-# ==========================================
-# 3. BARRA LATERAL (NAVEGACIÓN)
-# ==========================================
-with st.sidebar:
-    st.title("🎭 Consola 2.0")
-    st.caption(f"👤 Hola, {st.session_state.usuario_nombre}")
-    st.divider()
-    
-    menu = st.radio("Módulos:", [
-        "🗺️ Distribución",
-        "📊 Monitoreo de Equipo",
-        "📈 Tablero Gerencial",
-        "💍 Anillo de Poder"
-    ])
-
-# ==========================================
-# 4. LÓGICA PRINCIPAL POR MÓDULO
-DESPUÉS:
-
-Python
-        st.markdown(f'<br><a href="{auth_url}" target="_self" style="text-decoration: none;"><button style="background-color: #1e5b4f; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🔑 Entrar con Google</button></a>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ. 
-
 @st.cache_data(ttl=300, show_spinner=False)
 def obtener_permisos(correo):
     if not gc: return None, None
