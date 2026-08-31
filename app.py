@@ -164,10 +164,10 @@ if 'usuario_correo' not in st.session_state:
                         # CRÍTICO: Esto debe estar a la misma altura exacta que el 'if' de arriba. Usa ESPACIOS, no tabuladores.
                         st.query_params.clear()
                         st.rerun()
-            except Exception as e:
-                st.error(f"🚨 Error de conexión con Google: {e}")
-                st.query_params.clear()
-                st.rerun()
+                    except Exception as e:
+                        st.error(f"🚨 Error de conexión con Google: {e}")
+                        st.query_params.clear()
+                        st.rerun()
             
         # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
         correo_puerta = st.session_state.get('usuario_correo', '')
