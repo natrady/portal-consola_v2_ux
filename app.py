@@ -195,10 +195,11 @@ def obtener_permisos(correo):
 # ==========================================
 with st.sidebar:
     st.title("🎭 Consola 2.0")
-    st.caption(f"👤 Hola, {st.session_state.usuario_nombre}")
+    # CRÍTICO: Programación defensiva con .get() para evitar AttributeError si se borra la caché
+    nombre_mostrar = st.session_state.get("usuario_nombre", "Usuario")
+    st.caption(f"👤 Hola, {nombre_mostrar}")
     
-    # Validar permisos en base de datos
-    nivel_user, modulos_user = obtener_permisos(st.session_state.usuario_correo)
+    # Validar permisos en base de datos    nivel_user, modulos_user = obtener_permisos(st.session_state.usuario_correo)
     
     if not nivel_user:
         st.error("🚫 Acceso denegado. Tu correo no está registrado o estás inactivo.")
