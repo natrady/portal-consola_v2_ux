@@ -182,12 +182,26 @@ def obtener_permisos(correo):
     if not gc: return None, None
     try:
         hoja = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Usuarios_App")
-        datos = hoja.get_all_records()
-        for fila in datos:
-            if str(fila.get("Correo", "")).strip().lower() == correo.lower() and fila.get("Estatus", "") == "Activo":
-                return fila.get("Nivel", ""), fila.get("Módulos", "")
+        datos = hoja.get_all_values() # Blindaje: get_all_values no crashea con columnas vacías
+        if len(datos) > 1:
+            cabeceras = [str(c).strip() for c in datos[0]]
+            idx_correo = cabeceras.index("Correo") if "Correo" in cabeceras else -1
+            idx_estatus = cabeceras.index("Estatus") if "Estatus" in cabeceras else -1
+            idx_nivel = cabeceras.index("Nivel") if "Nivel" in cabeceras else -1
+            idx_modulos = cabeceras.index("Módulos") if "Módulos" in cabeceras else -1
+            
+            if idx_correo == -1 or idx_estatus == -1: return None, None
+            
+            for fila in datos[1:]:
+                # Evitar IndexError si la fila está incompleta
+                if len(fila) > idx_correo and str(fila[idx_correo]).strip().lower() == correo.lower():
+                    if len(fila) > idx_estatus and str(fila[idx_estatus]).strip() == "Activo":
+                        nivel = str(fila[idx_nivel]).strip() if idx_nivel != -1 and len(fila) > idx_nivel else ""
+                        modulos = str(fila[idx_modulos]).strip() if idx_modulos != -1 and len(fila) > idx_modulos else ""
+                        return nivel, modulos
         return None, None
-    except:
+    except Exception as e:
+        st.sidebar.error(f"🚨 Error leyendo permisos: {e}")
         return None, None
 
 # ==========================================
