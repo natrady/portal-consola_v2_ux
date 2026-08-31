@@ -164,10 +164,10 @@ if 'usuario_correo' not in st.session_state:
                     st.rerun()
         except Exception as e:
             st.error(f"🚨 Error de conexión con Google: {e}")
-    
-    # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
-        # CRÍTICO: Usamos .get() para evitar que una variable vacía ("") se salte el candado
-        if not st.session_state.get('usuario_correo'):
+            
+        # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
+        correo_puerta = st.session_state.get('usuario_correo', '')
+        if not correo_puerta or str(correo_puerta).strip() == '':
             st.title("🔒 Portal Consola 2.0")
             st.info("Acceso restringido. Por favor, identifícate con tu cuenta autorizada.")
             
@@ -219,12 +219,14 @@ with st.sidebar:
     nivel_user, modulos_user = obtener_permisos(correo_actual)
 
     if not nivel_user:
-        # Imprimimos el correo en el error para saber qué está leyendo la máquina
         st.error(f"🚫 Acceso denegado para el correo: '{correo_actual}'. No estás registrado o estás inactivo.")
         if st.button("Cerrar Sesión"):
-            # Método agresivo para aniquilar la sesión fantasma
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
+            st.query_params.clear() # 1. Matamos el código zombi de la URL
+            try:
+                cookie_manager.delete("portal_usuario") # 2. Matamos galletas residuales
+            except:
+                pass
+            st.session_state.clear() # 3. Pulverizamos la memoria
             st.rerun()
         st.stop()
         
