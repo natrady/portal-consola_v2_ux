@@ -154,33 +154,35 @@ if 'usuario_correo' not in st.session_state:
                 "grant_type": "authorization_code",
             }
             res = requests.post(token_url, data=data)
+            
             if res.status_code == 200:
-                    access_token = res.json().get("access_token")
-                    user_res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
-                    if user_res.status_code == 200:
-                        st.session_state.usuario_correo = user_res.json().get("email")
-                        st.session_state.usuario_nombre = user_res.json().get("name", "Usuario")
-                
-                        # CRÍTICO: Esto debe estar a la misma altura exacta que el 'if' de arriba. Usa ESPACIOS, no tabuladores.
-                        st.query_params.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"🚨 Error de conexión con Google: {e}")
-                        st.query_params.clear()
-                        st.rerun()
+                access_token = res.json().get("access_token")
+                user_res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
+                if user_res.status_code == 200:
+                    st.session_state.usuario_correo = user_res.json().get("email")
+                    st.session_state.usuario_nombre = user_res.json().get("name", "Usuario")
             
-        # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
-        correo_puerta = st.session_state.get('usuario_correo', '')
-        if not correo_puerta or str(correo_puerta).strip() == '':
-            st.title("🔒 Portal Consola 2.0")
-            st.info("Acceso restringido. Por favor, identifícate con tu cuenta autorizada.")
+            # CRÍTICO: Esto debe estar a la misma altura exacta que el 'if' de arriba.
+            st.query_params.clear()
+            st.rerun()
             
-            auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={st.secrets['google_oauth']['client_id']}&redirect_uri={st.secrets['google_oauth']['redirect_uri']}&response_type=code&scope=openid%20email%20profile&prompt=select_account"
-            
-            # CRÍTICO: Usamos target="_blank". Streamlit bloquea target="_top" por la seguridad de su iframe.
-            html_boton = f'<div style="text-align: center; margin-top: 30px;"><a href="{auth_url}" target="_blank" style="display: inline-block; background-color: #1e5b4f; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🔑 Entrar con Google</a></div>'
-            st.markdown(html_boton, unsafe_allow_html=True)
-            st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ. 
+        except Exception as e:
+            st.error(f"🚨 Error de conexión con Google: {e}")
+            st.query_params.clear()
+            st.rerun()
+
+    # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
+    correo_puerta = st.session_state.get('usuario_correo', '')
+    if not correo_puerta or str(correo_puerta).strip() == '':
+        st.title("🔒 Portal Consola 2.0")
+        st.info("Acceso restringido. Por favor, identifícate con tu cuenta autorizada.")
+        
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={st.secrets['google_oauth']['client_id']}&redirect_uri={st.secrets['google_oauth']['redirect_uri']}&response_type=code&scope=openid%20email%20profile&prompt=select_account"
+        
+        # CRÍTICO: Usamos target="_blank". Streamlit bloquea target="_top" por la seguridad de su iframe.
+        html_boton = f'<div style="text-align: center; margin-top: 30px;"><a href="{auth_url}" target="_blank" style="display: inline-block; background-color: #1e5b4f; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🔑 Entrar con Google</a></div>'
+        st.markdown(html_boton, unsafe_allow_html=True)
+        st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ. 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def obtener_permisos(correo):
@@ -208,7 +210,6 @@ def obtener_permisos(correo):
     except Exception as e:
         st.sidebar.error(f"🚨 Error leyendo permisos: {e}")
         return None, None
-
 # ==========================================
 # 3. BARRA LATERAL (NAVEGACIÓN)
 # ==========================================
