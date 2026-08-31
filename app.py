@@ -164,7 +164,7 @@ if 'usuario_correo' not in st.session_state:
                 # CRÍTICO: Limpiamos la URL y reiniciamos SIEMPRE, sin importar si Google aceptó o rechazó el código
                 st.query_params.clear()
                 st.rerun()
-                except Exception as e:
+            except Exception as e:
                 st.error(f"🚨 Error de conexión con Google: {e}")
                 st.query_params.clear()
                 st.rerun()
