@@ -161,9 +161,9 @@ if 'usuario_correo' not in st.session_state:
                         st.session_state.usuario_correo = user_res.json().get("email")
                         st.session_state.usuario_nombre = user_res.json().get("name", "Usuario")
                 
-                # CRÍTICO: Esto debe estar a la misma altura exacta que el 'if' de arriba. Usa ESPACIOS, no tabuladores.
-                st.query_params.clear()
-                st.rerun()
+                        # CRÍTICO: Esto debe estar a la misma altura exacta que el 'if' de arriba. Usa ESPACIOS, no tabuladores.
+                        st.query_params.clear()
+                        st.rerun()
             except Exception as e:
                 st.error(f"🚨 Error de conexión con Google: {e}")
                 st.query_params.clear()
