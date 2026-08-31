@@ -166,7 +166,8 @@ if 'usuario_correo' not in st.session_state:
             st.error(f"🚨 Error de conexión con Google: {e}")
     
     # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
-        if 'usuario_correo' not in st.session_state:
+        # CRÍTICO: Usamos .get() para evitar que una variable vacía ("") se salte el candado
+        if not st.session_state.get('usuario_correo'):
             st.title("🔒 Portal Consola 2.0")
             st.info("Acceso restringido. Por favor, identifícate con tu cuenta autorizada.")
             
@@ -218,9 +219,12 @@ with st.sidebar:
     nivel_user, modulos_user = obtener_permisos(correo_actual)
 
     if not nivel_user:
-        st.error("🚫 Acceso denegado. Tu correo no está registrado o estás inactivo.")
+        # Imprimimos el correo en el error para saber qué está leyendo la máquina
+        st.error(f"🚫 Acceso denegado para el correo: '{correo_actual}'. No estás registrado o estás inactivo.")
         if st.button("Cerrar Sesión"):
-            st.session_state.clear()
+            # Método agresivo para aniquilar la sesión fantasma
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
             st.rerun()
         st.stop()
         
