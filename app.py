@@ -166,17 +166,16 @@ if 'usuario_correo' not in st.session_state:
             st.error(f"🚨 Error de conexión con Google: {e}")
     
     # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
-    if 'usuario_correo' not in st.session_state:
-        st.markdown('<div style="text-align: center; margin-top: 50px;">', unsafe_allow_html=True)
-        st.title("🔒 Portal Consola 2.0")
-        st.markdown("Acceso restringido. Por favor, identifícate con tu cuenta autorizada.")
-        
-        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={st.secrets['google_oauth']['client_id']}&redirect_uri={st.secrets['google_oauth']['redirect_uri']}&response_type=code&scope=openid%20email%20profile&prompt=select_account"
-        
-        # CRÍTICO: Aplicamos el CSS directamente al <a> porque HTML5 bloquea clics en botones dentro de enlaces
-        st.markdown(f'<br><a href="{auth_url}" target="_top" style="display: inline-block; background-color: #1e5b4f; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center;">🔑 Entrar con Google</a>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ.
+        if 'usuario_correo' not in st.session_state:
+            st.title("🔒 Portal Consola 2.0")
+            st.info("Acceso restringido. Por favor, identifícate con tu cuenta autorizada.")
+            
+            auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={st.secrets['google_oauth']['client_id']}&redirect_uri={st.secrets['google_oauth']['redirect_uri']}&response_type=code&scope=openid%20email%20profile&prompt=select_account"
+            
+            # CRÍTICO: Usamos target="_blank". Streamlit bloquea target="_top" por la seguridad de su iframe.
+            html_boton = f'<div style="text-align: center; margin-top: 30px;"><a href="{auth_url}" target="_blank" style="display: inline-block; background-color: #1e5b4f; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">🔑 Entrar con Google</a></div>'
+            st.markdown(html_boton, unsafe_allow_html=True)
+            st.stop() # DETENEMOS LA EJECUCIÓN AQUÍ. 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def obtener_permisos(correo):
