@@ -154,14 +154,14 @@ if 'usuario_correo' not in st.session_state:
                 "grant_type": "authorization_code",
             }
             res = requests.post(token_url, data=data)
-            if res.status_code == 200:
+                if res.status_code == 200:
                     access_token = res.json().get("access_token")
                     user_res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
                     if user_res.status_code == 200:
                         st.session_state.usuario_correo = user_res.json().get("email")
                         st.session_state.usuario_nombre = user_res.json().get("name", "Usuario")
                 
-                # CRÍTICO: Limpiamos la URL y reiniciamos SIEMPRE, sin importar si Google aceptó o rechazó el código
+                # CRÍTICO: Esto debe estar a la misma altura exacta que el 'if' de arriba. Usa ESPACIOS, no tabuladores.
                 st.query_params.clear()
                 st.rerun()
             except Exception as e:
