@@ -154,7 +154,7 @@ if 'usuario_correo' not in st.session_state:
                 "grant_type": "authorization_code",
             }
             res = requests.post(token_url, data=data)
-                if res.status_code == 200:
+            if res.status_code == 200:
                     access_token = res.json().get("access_token")
                     user_res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
                     if user_res.status_code == 200:
