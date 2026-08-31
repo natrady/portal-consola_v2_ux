@@ -155,15 +155,19 @@ if 'usuario_correo' not in st.session_state:
             }
             res = requests.post(token_url, data=data)
             if res.status_code == 200:
-                access_token = res.json().get("access_token")
-                user_res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
-                if user_res.status_code == 200:
-                    st.session_state.usuario_correo = user_res.json().get("email")
-                    st.session_state.usuario_nombre = user_res.json().get("name", "Usuario")
-                    st.query_params.clear() # Limpiamos la URL para no ciclar la app
-                    st.rerun()
-        except Exception as e:
-            st.error(f"🚨 Error de conexión con Google: {e}")
+                    access_token = res.json().get("access_token")
+                    user_res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
+                    if user_res.status_code == 200:
+                        st.session_state.usuario_correo = user_res.json().get("email")
+                        st.session_state.usuario_nombre = user_res.json().get("name", "Usuario")
+                
+                # CRÍTICO: Limpiamos la URL y reiniciamos SIEMPRE, sin importar si Google aceptó o rechazó el código
+                st.query_params.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"🚨 Error de conexión con Google: {e}")
+                st.query_params.clear()
+                st.rerun()
             
         # 2. Si no hay sesión ni código, cerramos la puerta y mostramos el botón
         correo_puerta = st.session_state.get('usuario_correo', '')
