@@ -638,10 +638,10 @@ if menu == "🗺️ Distribución":
                                 st.error(f"🚨 Error de conexión al guardar en Sheets: {e}")
 
                             st.rerun() # Reiniciamos para que la tabla y el mensaje lean los nuevos cambios
-
+                            
 elif menu == "💍 Anillo de Poder":
-    st.title("💍 Anillo de Poder (Accesos)")
-    st.markdown("Control maestro de usuarios, niveles y permisos de la aplicación.")
+    st.title("💍 Anillo de Poder")
+    st.markdown("Control maestro de la lista de invitados y sus permisos.")
     
     try:
         hoja_usuarios = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Usuarios_App")
@@ -650,36 +650,57 @@ elif menu == "💍 Anillo de Poder":
         if len(datos_usuarios) > 0:
             df_usuarios = pd.DataFrame(datos_usuarios[1:], columns=datos_usuarios[0])
             
-            # Configuramos las columnas para el editor interactivo (UX)
+            # --- UI Parte 1: Formulario de Alta (UX Limpia) ---
+            st.markdown("### ➕ Invitar Nuevo Usuario")
+            with st.form("form_nuevo_invitado", clear_on_submit=True):
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    nuevo_correo = st.text_input("Correo Electrónico (Gmail) *", placeholder="ejemplo@gmail.com")
+                    nuevo_nombre = st.text_input("Nombre Completo *", placeholder="Ej. Juan Pérez")
+                with col_f2:
+                    nuevo_nivel = st.selectbox("Nivel de Acceso *", ["Verificador", "Coordinador", "Administrativo", "Admin", "Absoluto"])
+                    nuevo_modulos = st.text_input("Módulos Permitidos", value="Todos", help="Ej: Todos, o Distribución, Monitoreo")
+                
+                if st.form_submit_button("✉️ Agregar al Anillo", type="primary", use_container_width=True):
+                    if nuevo_correo.strip() and nuevo_nombre.strip():
+                        nueva_fila = [nuevo_correo.lower().strip(), nuevo_nombre.strip(), nuevo_nivel, nuevo_modulos, "Activo"]
+                        hoja_usuarios.append_row(nueva_fila)
+                        st.success(f"✅ ¡{nuevo_nombre} ha sido invitado al Anillo de Poder!")
+                        st.rerun()
+                    else:
+                        st.error("🚨 Faltan campos obligatorios (Correo y Nombre).")
+            
+            st.divider()
+            
+            # --- UI Parte 2: Gestión de la tabla existente ---
+            st.markdown("### 🛡️ Gestión de Permisos Actuales")
+            st.caption("Cambia el nivel, los módulos o da de baja a los usuarios. El correo es la llave y no se puede editar aquí.")
+            
             config_columnas = {
-                "Correo": st.column_config.TextColumn("Correo (Gmail)", required=True),
-                "Nombre": st.column_config.TextColumn("Nombre completo", required=True),
-                "Nivel": st.column_config.SelectboxColumn("Nivel", options=["Absoluto", "Admin", "Coordinador", "Verificador"], required=True),
-                "Módulos": st.column_config.TextColumn("Módulos (Separados por coma)"),
+                "Correo": st.column_config.TextColumn("Correo (Llave)", disabled=True), # Blindaje: No cambiar correo
+                "Nombre": st.column_config.TextColumn("Nombre completo"),
+                "Nivel": st.column_config.SelectboxColumn("Nivel", options=["Absoluto", "Admin", "Administrativo", "Coordinador", "Verificador"], required=True),
+                "Módulos": st.column_config.TextColumn("Módulos"),
                 "Estatus": st.column_config.SelectboxColumn("Estatus", options=["Activo", "Baja"], required=True)
             }
             
-            with st.container():
-                st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
-                st.caption("Edita directamente la tabla, agrega o elimina filas y presiona Guardar.")
-                
-                # Editor interactivo
-                df_editado = st.data_editor(df_usuarios, column_config=config_columnas, num_rows="dynamic", use_container_width=True)
-                
-                if st.button("💾 Guardar Cambios en Usuarios", type="primary", use_container_width=True):
-                    # Blindaje: Limpiamos nulos y aseguramos que todo sea texto
-                    df_editado = df_editado.fillna("")
-                    nuevos_valores = [df_editado.columns.tolist()] + df_editado.values.tolist()
-                    
-                    hoja_usuarios.clear() # Limpiamos hoja antes de reescribir para evitar basura
-                    hoja_usuarios.update(values=nuevos_valores, range_name="A1")
-                    st.success("✅ Catálogo de usuarios actualizado exitosamente.")
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Encerramos la tabla en una tarjeta visual
+            st.markdown('<div class="dashboard-card" style="border-top: 4px solid #a57f2c;">', unsafe_allow_html=True)
+            df_editado = st.data_editor(df_usuarios, column_config=config_columnas, num_rows="dynamic", use_container_width=True)
+            
+            if st.button("💾 Guardar Cambios en Accesos", type="secondary", use_container_width=True):
+                df_editado = df_editado.fillna("")
+                nuevos_valores = [df_editado.columns.tolist()] + df_editado.values.tolist()
+                hoja_usuarios.clear()
+                hoja_usuarios.update(values=nuevos_valores, range_name="A1")
+                st.success("✅ Permisos actualizados en la base de datos.")
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+            
         else:
             st.warning("⚠️ La pestaña 'Usuarios_App' está vacía. Agrega los encabezados primero.")
     except Exception as e:
-        st.error(f"🚨 Error: Asegúrate de crear la pestaña 'Usuarios_App' en tu Google Sheets. Detalle: {e}")
+        st.error(f"🚨 Error de conexión o formato en Usuarios_App: {e}")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
