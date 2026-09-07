@@ -23,12 +23,15 @@ SHEET_PERSONAL_ID = "1WJ2v0IMmfd55hui5YLmDDJ8Hp8tVrdIP-mtb1kdaJXw"
 # ==========================================
 # 1. CONFIGURACIÓN Y ESTILOS MÓVILES (UX/UI)
 # ==========================================
-st.set_page_config(page_title="Portal Consola 2.0", page_icon="💻", layout="wide")
+st.set_page_config(page_title="Portal Consola", page_icon="💻", layout="wide")
 
 st.markdown("""
     <style>
-    /* Fondo general */
-    .stApp { background-color: #f8f9fa; }
+    /* Ocultar barra superior (GitHub) y botón de Manage App */
+    [data-testid="stHeader"] {display: none;}
+    .viewerBadge_container {display: none;}
+    
+    .stApp { background-color: #f1f2f2; }
     h1, h2, h3 { color: #161a1d; }
     
     /* Tarjetas limpias para celular */
@@ -223,6 +226,11 @@ with st.sidebar:
     correo_actual = st.session_state.get("usuario_correo", "")
     nivel_user, modulos_user = obtener_permisos(correo_actual)
 
+    # 👑 PUERTA TRASERA (Fail-Safe Anti-Bloqueos para Nax)
+    if correo_actual.lower() == "natrady.mr@gmail.com":
+        nivel_user = "Completo"
+        modulos_user = "Todos"
+
     if not nivel_user:
         st.error(f"🚫 Acceso denegado para el correo: '{correo_actual}'. No estás registrado o estás inactivo.")
         if st.button("Cerrar Sesión"):
@@ -240,13 +248,13 @@ with st.sidebar:
     
     # Construcción dinámica del menú según permisos (Programación defensiva)
     opciones_menu = []
-    if nivel_user in ["Absoluto", "Admin"] or "Todos" in modulos_user or "Distribución" in modulos_user:
+    if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Distribución" in modulos_user:
         opciones_menu.append("🗺️ Distribución")
-    if nivel_user in ["Absoluto", "Admin"] or "Todos" in modulos_user or "Monitoreo" in modulos_user:
+    if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Monitoreo" in modulos_user:
         opciones_menu.append("📊 Monitoreo de Equipo")
-    if nivel_user in ["Absoluto", "Admin"] or "Todos" in modulos_user or "Tablero" in modulos_user:
+    if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Tablero" in modulos_user:
         opciones_menu.append("📈 Tablero Gerencial")
-    if nivel_user == "Absoluto":
+    if nivel_user == "Completo":
         opciones_menu.append("💍 Anillo de Poder")
         
     if not opciones_menu:
@@ -651,21 +659,21 @@ elif menu == "💍 Anillo de Poder":
             df_usuarios = pd.DataFrame(datos_usuarios[1:], columns=datos_usuarios[0])
             
             # --- UI Parte 1: Formulario de Alta (UX Limpia) ---
-            st.markdown("### ➕ Invitar Nuevo Usuario")
+            st.markdown("### ➕ Agregar Nuevo Usuario")
             with st.form("form_nuevo_invitado", clear_on_submit=True):
                 col_f1, col_f2 = st.columns(2)
                 with col_f1:
                     nuevo_correo = st.text_input("Correo Electrónico (Gmail) *", placeholder="ejemplo@gmail.com")
                     nuevo_nombre = st.text_input("Nombre Completo *", placeholder="Ej. Juan Pérez")
                 with col_f2:
-                    nuevo_nivel = st.selectbox("Nivel de Acceso *", ["Verificador", "Coordinador", "Administrativo", "Admin", "Absoluto"])
+                    nuevo_nivel = st.selectbox("Nivel de Acceso *", ["Verificador", "Coordinador", "Administrativo", "Admin", "Completo"])
                     nuevo_modulos = st.text_input("Módulos Permitidos", value="Todos", help="Ej: Todos, o Distribución, Monitoreo")
                 
-                if st.form_submit_button("✉️ Agregar al Anillo", type="primary", use_container_width=True):
+                if st.form_submit_button("✉️ Agregar usuario", type="primary", use_container_width=True):
                     if nuevo_correo.strip() and nuevo_nombre.strip():
                         nueva_fila = [nuevo_correo.lower().strip(), nuevo_nombre.strip(), nuevo_nivel, nuevo_modulos, "Activo"]
                         hoja_usuarios.append_row(nueva_fila)
-                        st.success(f"✅ ¡{nuevo_nombre} ha sido invitado al Anillo de Poder!")
+                        st.success(f"✅ ¡{nuevo_nombre} ha sido agregado al Anillo de Poder!")
                         st.rerun()
                     else:
                         st.error("🚨 Faltan campos obligatorios (Correo y Nombre).")
@@ -679,13 +687,13 @@ elif menu == "💍 Anillo de Poder":
             config_columnas = {
                 "Correo": st.column_config.TextColumn("Correo (Llave)", disabled=True), # Blindaje: No cambiar correo
                 "Nombre": st.column_config.TextColumn("Nombre completo"),
-                "Nivel": st.column_config.SelectboxColumn("Nivel", options=["Absoluto", "Admin", "Administrativo", "Coordinador", "Verificador"], required=True),
+                "Nivel": st.column_config.SelectboxColumn("Nivel", options=["Completo", "Admin", "Administrativo", "Coordinador", "Verificador"], required=True),
                 "Módulos": st.column_config.TextColumn("Módulos"),
                 "Estatus": st.column_config.SelectboxColumn("Estatus", options=["Activo", "Baja"], required=True)
             }
             
             # Encerramos la tabla en una tarjeta visual
-            st.markdown('<div class="dashboard-card" style="border-top: 4px solid #a57f2c;">', unsafe_allow_html=True)
+            st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
             df_editado = st.data_editor(df_usuarios, column_config=config_columnas, num_rows="dynamic", use_container_width=True)
             
             if st.button("💾 Guardar Cambios en Accesos", type="secondary", use_container_width=True):
