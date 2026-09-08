@@ -717,7 +717,7 @@ elif menu == "💍 Anillo de Poder":
 
 elif menu == "👥 Mi Equipo":
     st.title("👥 Gestión de Mi Equipo")
-    st.markdown("Registra justificaciones y define las fortalezas y debilidades operativas de tus verificadores.")
+    st.markdown("Registra justificaciones, define la modalidad de trabajo y las fortalezas operativas de tus verificadores.")
     
     if df_global.empty:
         st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
@@ -732,58 +732,19 @@ elif menu == "👥 Mi Equipo":
             if 'Observaciones' not in df_global.columns: df_global['Observaciones'] = ""
             if 'Módulo Estrella' not in df_global.columns: df_global['Módulo Estrella'] = ""
             if 'Módulo a Evitar' not in df_global.columns: df_global['Módulo a Evitar'] = ""
+            if 'Modalidad' not in df_global.columns: df_global['Modalidad'] = ""
             
             # Limpiamos las opciones para quitar Vacaciones y Apoyo
-            opciones_habilidades = [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
+            opciones_habilidades = [""] + [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
+            opciones_modalidad = ["", "🏠 Home Office", "🏢 Oficina"]
             
-            # --- SECCIÓN 1: EDICIÓN EN LOTE ---
-            st.markdown("### ⚡ Asignación en Lote")
-            st.caption("Aplica observaciones o habilidades a varias personas al mismo tiempo.")
-            
-            with st.form("form_lote_equipo", clear_on_submit=True):
-                nombres_equipo = df_equipo['Nombre'].tolist()
-                seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
-                
-                col_l1, col_l2 = st.columns(2)
-                with col_l1:
-                    lote_obs = st.text_input("📝 Justificación / Observación General:")
-                with col_l2:
-                    lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades)
-                    lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades)
-                    
-                if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
-                    if seleccionados:
-                        # Empate defensivo con la base global
-                        df_global.set_index('Nombre', inplace=True)
-                        for persona in seleccionados:
-                            if lote_obs: df_global.at[persona, 'Observaciones'] = lote_obs
-                            if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
-                            if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
-                        df_global.reset_index(inplace=True)
-                        
-                        try:
-                            hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                            df_global_str = df_global.fillna("").astype(str)
-                            matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
-                            hoja_personal.clear()
-                            hoja_personal.update(values=matriz_cruda, range_name="A1")
-                            cargar_personal.clear()
-                            st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"🚨 Error al guardar en Sheets: {e}")
-                    else:
-                        st.error("Debes seleccionar al menos a un verificador.")
-
-            st.divider()
-            
-            # --- SECCIÓN 2: EDICIÓN INDIVIDUAL MANUAL ---
+            # --- SECCIÓN 1: EDICIÓN INDIVIDUAL MANUAL ---
             st.markdown("### ✍️ Edición Individual")
-            st.caption("Ajustes rápidos manuales. Si pones varios módulos, sepáralos por comas.")
+            st.caption("Ajustes rápidos uno a uno. Selecciona las opciones de las listas para evitar errores de escritura.")
             
-            # Recargamos la vista por si hubo cambios en lote
+            # Recargamos la vista por si hubo cambios
             df_equipo_actualizado = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
-            columnas_vista = ['Nombre', 'Módulo Estrella', 'Módulo a Evitar', 'Observaciones']
+            columnas_vista = ['Nombre', 'Modalidad', 'Módulo Estrella', 'Módulo a Evitar', 'Observaciones']
             
             st.markdown('<div class="mobile-card border-verde">', unsafe_allow_html=True)
             df_editado = st.data_editor(
@@ -792,8 +753,9 @@ elif menu == "👥 Mi Equipo":
                 hide_index=True,
                 column_config={
                     "Nombre": st.column_config.TextColumn("Verificador", disabled=True),
-                    "Módulo Estrella": st.column_config.TextColumn("Módulo Estrella ⭐"),
-                    "Módulo a Evitar": st.column_config.TextColumn("Módulo a Evitar ⚠️"),
+                    "Modalidad": st.column_config.SelectboxColumn("Modalidad 📍", options=opciones_modalidad),
+                    "Módulo Estrella": st.column_config.SelectboxColumn("Módulo Estrella ⭐", options=opciones_habilidades),
+                    "Módulo a Evitar": st.column_config.SelectboxColumn("Módulo a Evitar ⚠️", options=opciones_habilidades),
                     "Observaciones": st.column_config.TextColumn("Justificaciones / Notas 📝")
                 }
             )
@@ -816,6 +778,48 @@ elif menu == "👥 Mi Equipo":
                 except Exception as e:
                     st.error(f"🚨 Error al guardar en Sheets: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
+
+            st.divider()
+
+            # --- SECCIÓN 2: EDICIÓN EN LOTE (OCULTA EN EXPANDER) ---
+            with st.expander("⚡ Asignación en Lote (Múltiples verificadores)"):
+                st.caption("Aplica la misma justificación, modalidad o habilidades a varias personas de un solo golpe.")
+                
+                with st.form("form_lote_equipo", clear_on_submit=True):
+                    nombres_equipo = df_equipo['Nombre'].tolist()
+                    seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
+                    
+                    col_l1, col_l2 = st.columns(2)
+                    with col_l1:
+                        lote_modalidad = st.selectbox("📍 Modalidad de Trabajo:", ["(Sin cambios)"] + opciones_modalidad[1:])
+                        lote_obs = st.text_input("📝 Justificación / Observación General:")
+                    with col_l2:
+                        lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades[1:])
+                        lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades[1:])
+                        
+                    if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
+                        if seleccionados:
+                            df_global.set_index('Nombre', inplace=True)
+                            for persona in seleccionados:
+                                if lote_obs: df_global.at[persona, 'Observaciones'] = lote_obs
+                                if lote_modalidad != "(Sin cambios)": df_global.at[persona, 'Modalidad'] = lote_modalidad
+                                if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
+                                if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
+                            df_global.reset_index(inplace=True)
+                            
+                            try:
+                                hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+                                df_global_str = df_global.fillna("").astype(str)
+                                matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
+                                hoja_personal.clear()
+                                hoja_personal.update(values=matriz_cruda, range_name="A1")
+                                cargar_personal.clear()
+                                st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"🚨 Error al guardar en Sheets: {e}")
+                        else:
+                            st.error("Debes seleccionar al menos a un verificador.")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
