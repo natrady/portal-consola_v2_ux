@@ -27,8 +27,8 @@ st.set_page_config(page_title="Portal Consola", page_icon="💻", layout="wide")
 
 st.markdown("""
     <style>
-    /* Ocultar barra superior (GitHub) y botón de Manage App */
-    [data-testid="stHeader"] {display: none;}
+    /* Ocultar menú de GitHub/Streamlit sin matar el botón de la barra lateral */
+    [data-testid="stToolbar"] {display: none;}
     .viewerBadge_container {display: none;}
     
     .stApp { background-color: #f1f2f2; }
@@ -458,24 +458,27 @@ if menu == "🗺️ Distribución":
                 
                 df_dist_hoy = df_todas_dist[(df_todas_dist.get('Fecha') == fecha_str) & (df_todas_dist.get('Región') == region_sel)]
                 
-                # UX: Si hoy está vacío, damos la opción de clonar ayer
-                if df_dist_hoy.empty and not df_todas_dist.empty:
+                # UX: Botón siempre disponible para clonar ayer, si es que hubo datos ayer
+                if not df_todas_dist.empty:
                     df_dist_ayer = df_todas_dist[(df_todas_dist.get('Fecha') == fecha_ayer_str) & (df_todas_dist.get('Región') == region_sel)]
                     if not df_dist_ayer.empty:
-                        if st.button("📋 Copiar distribución de ayer", use_container_width=True):
+                        if st.button("📋 Distribuir igual que ayer", use_container_width=True):
                             for _, f_ayer in df_dist_ayer.iterrows():
                                 idx_persona = df_region.index[df_region['Nombre'] == f_ayer.get('Nombre')].tolist()
                                 if idx_persona:
                                     idx_p = idx_persona[0]
                                     st.session_state[f"mod_{idx_p}"] = f_ayer.get('Módulo', 'RE')
-                                    st.session_state[f"est_{idx_p}"] = str(f_ayer.get('Estado', 'Barrido')).split(', ')
+                                    st.session_state[f"est_{idx_p}"] = [e.strip() for e in str(f_ayer.get('Estado', 'Barrido')).split(', ') if e.strip()]
                                     st.session_state[f"mun_{idx_p}"] = [m.strip() for m in str(f_ayer.get('Municipios', '')).split(', ') if m.strip()]
                                     st.session_state[f"notas_{idx_p}"] = f_ayer.get('Instrucciones', '')
-                            # Simulamos una tirada de dados manual para forzar la actualización
+                            
                             st.session_state[f'dados_{region_sel}'] = dict(zip(df_dist_ayer['Nombre'], df_dist_ayer['Módulo']))
+                            st.success("✅ Datos de ayer cargados. Revisa la Vista Previa o la pestaña Uno a Uno antes de guardar.")
                             st.rerun()
 
                 dict_dados = st.session_state.get(f'dados_{region_sel}', {})
+                
+                # CRÍTICO: Agregamos la pestaña de Modalidad al inicio
                 
                 # Validación matemática contra la estrategia global (Visible para todas las pestañas)
                 if dict_dados:
