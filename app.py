@@ -127,6 +127,19 @@ def cargar_personal():
 
 df_global = cargar_personal()
 
+@st.cache_data(ttl=120, show_spinner="Cargando Histórico...")
+def cargar_distribuciones():
+    if not gc: return pd.DataFrame()
+    try:
+        hoja = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribuir_Modulos")
+        datos = hoja.get_all_values()
+        if len(datos) < 2: return pd.DataFrame(columns=["Fecha", "Región", "Nombre", "Módulo", "Estado", "Municipios", "Instrucciones"])
+        df = pd.DataFrame(datos[1:], columns=datos[0])
+        return df
+    except Exception as e:
+        st.error(f"🚨 Error leyendo Distribuir_Modulos: {e}")
+        return pd.DataFrame(columns=["Fecha", "Región", "Nombre", "Módulo", "Estado", "Municipios", "Instrucciones"])
+
 @st.cache_data(ttl=60, show_spinner=False)
 def leer_estrategias_nube():
     if not gc: return {}, {}
@@ -283,30 +296,31 @@ if menu == "🗺️ Distribución":
     if df_global.empty:
         st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
     else:
-        # 1. Calendario con memoria (Session State)
-        if 'fecha_dist' not in st.session_state:
-            st.session_state.fecha_dist = datetime.datetime.now().date() + datetime.timedelta(days=1)
-            
-        fecha_sel = st.date_input("📅 ¿Para qué fecha es esta distribución?", value=st.session_state.fecha_dist)
-        st.session_state.fecha_dist = fecha_sel
+        # 1. UX: Controles fijos inyectados en la barra lateral
+        with st.sidebar:
+            st.divider()
+            st.markdown("### 📌 Controles de Distribución")
+            if 'fecha_dist' not in st.session_state:
+                st.session_state.fecha_dist = datetime.datetime.now().date() + datetime.timedelta(days=1)
+                
+            fecha_sel = st.date_input("📅 Fecha a asignar:", value=st.session_state.fecha_dist)
+            st.session_state.fecha_dist = fecha_sel
+            region_sel = st.selectbox("📍 Región a trabajar:", opciones_regiones_limpias)
+
+        st.markdown(f"**📍 Trabajando en:** {region_sel} | **📅 Fecha:** {fecha_sel.strftime('%d/%m/%Y')}")
+        st.divider()
 
         # 2. Recálculo dinámico de disponibilidad basado en la fecha elegida
         def recalcular_disp(fila):
             if pd.notna(fila.get('Inicio incidencia')) and pd.notna(fila.get('Fin Incidencia')):
-                # Si la fecha elegida cae dentro de sus vacaciones/incapacidad, no está disponible
-                if fila['Inicio incidencia'] <= fecha_sel <= fila['Fin Incidencia']:
-                    return "No"
+                if fila['Inicio incidencia'] <= fecha_sel <= fila['Fin Incidencia']: return "No"
             return "Si"
             
         df_global['Disponibles_Hoy'] = df_global.apply(recalcular_disp, axis=1)
 
-        # Extraemos las regiones operativas y calculamos su personal disponible
         df_operativos = df_global[(df_global['Rol'] == 'Verificador') & (df_global['Disponibles_Hoy'] == 'Si') & (~df_global['Región'].isin(['AD', 'Apoyo']))]
         conteo_regiones = df_operativos['Región'].value_counts()
         limite_minimo = int(conteo_regiones.min()) if not conteo_regiones.empty else 0
-
-        region_sel = st.selectbox("📍 Selecciona tu Región para trabajar:", opciones_regiones_limpias)
-        st.divider()
         
         # ==========================================
         # MODO 3: ESTRATEGIA GLOBAL (SOLO PARA AD)
@@ -437,6 +451,30 @@ if menu == "🗺️ Distribución":
             else:
                 st.subheader(f"👥 Equipo {region_sel} ({len(df_region)} personas)")
                 
+                # Leemos la tabla transaccional
+                df_todas_dist = cargar_distribuciones()
+                fecha_str = str(st.session_state.fecha_dist)
+                fecha_ayer_str = str(st.session_state.fecha_dist - datetime.timedelta(days=1))
+                
+                df_dist_hoy = df_todas_dist[(df_todas_dist.get('Fecha') == fecha_str) & (df_todas_dist.get('Región') == region_sel)]
+                
+                # UX: Si hoy está vacío, damos la opción de clonar ayer
+                if df_dist_hoy.empty and not df_todas_dist.empty:
+                    df_dist_ayer = df_todas_dist[(df_todas_dist.get('Fecha') == fecha_ayer_str) & (df_todas_dist.get('Región') == region_sel)]
+                    if not df_dist_ayer.empty:
+                        if st.button("📋 Copiar distribución de ayer", use_container_width=True):
+                            for _, f_ayer in df_dist_ayer.iterrows():
+                                idx_persona = df_region.index[df_region['Nombre'] == f_ayer.get('Nombre')].tolist()
+                                if idx_persona:
+                                    idx_p = idx_persona[0]
+                                    st.session_state[f"mod_{idx_p}"] = f_ayer.get('Módulo', 'RE')
+                                    st.session_state[f"est_{idx_p}"] = str(f_ayer.get('Estado', 'Barrido')).split(', ')
+                                    st.session_state[f"mun_{idx_p}"] = [m.strip() for m in str(f_ayer.get('Municipios', '')).split(', ') if m.strip()]
+                                    st.session_state[f"notas_{idx_p}"] = f_ayer.get('Instrucciones', '')
+                            # Simulamos una tirada de dados manual para forzar la actualización
+                            st.session_state[f'dados_{region_sel}'] = dict(zip(df_dist_ayer['Nombre'], df_dist_ayer['Módulo']))
+                            st.rerun()
+
                 dict_dados = st.session_state.get(f'dados_{region_sel}', {})
                 
                 # Validación matemática contra la estrategia global (Visible para todas las pestañas)
@@ -644,10 +682,21 @@ if menu == "🗺️ Distribución":
                         asignaciones_ordenadas = sorted(asignaciones_actuales.items(), key=lambda item: (item[1], item[0]))
                         
                         # Generamos una tabla HTML con UI pulida
-                        html_tabla = "<table style='width:100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-family: sans-serif; font-size: 14px; margin-bottom: 20px;'><tr style='background-color: #9b2247; color: white; text-align: left;'><th style='padding: 12px 15px;'>Verificador</th><th style='padding: 12px 15px;'>Módulo Asignado</th></tr>"
+                        html_tabla = "<table style='width:100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-family: sans-serif; font-size: 14px; margin-bottom: 20px;'><tr style='background-color: #9b2247; color: white; text-align: left;'><th style='padding: 12px 15px;'>Verificador</th><th style='padding: 12px 15px;'>Módulo Asignado</th><th style='padding: 12px 15px;'>Estado(s)</th><th style='padding: 12px 15px;'>Instrucciones</th></tr>"
+                        
+                        # Diccionario rápido para encontrar el índice (necesario para leer la sesión manual)
+                        dict_indices = {row['Nombre']: idx for idx, row in df_region.iterrows()}
+                        
                         for i, (persona, mod) in enumerate(asignaciones_ordenadas):
                             bg_color = "#f8f9fa" if i % 2 == 0 else "#ffffff"
-                            html_tabla += f"<tr style='background-color: {bg_color}; border-bottom: 1px solid #e9ecef;'><td style='padding: 10px 15px; color: #343a40;'>👤 {persona}</td><td style='padding: 10px 15px; color: #1e5b4f; font-weight: 600;'>{mod}</td></tr>"
+                            idx_persona = dict_indices.get(persona, -1)
+                            
+                            # Leer valores actuales de la pestaña manual, si no hay, pone defaults limpios
+                            estados_act = st.session_state.get(f"est_{idx_persona}", ["Barrido"])
+                            estados_str = ", ".join(estados_act) if isinstance(estados_act, list) else estados_act
+                            notas_act = st.session_state.get(f"notas_{idx_persona}", "")
+                            
+                            html_tabla += f"<tr style='background-color: {bg_color}; border-bottom: 1px solid #e9ecef;'><td style='padding: 10px 15px; color: #343a40;'>👤 {persona}</td><td style='padding: 10px 15px; color: #1e5b4f; font-weight: 600;'>{mod}</td><td style='padding: 10px 15px; color: #343a40;'>{estados_str}</td><td style='padding: 10px 15px; color: #6c757d; font-style: italic;'>{notas_act}</td></tr>"
                         html_tabla += "</table>"
                         st.markdown(html_tabla, unsafe_allow_html=True)
                         
@@ -746,7 +795,20 @@ if menu == "🗺️ Distribución":
                                                 st.success(f"🎯 {est_sel} es Focalizado. Nota: {nota}")
                                                 
                                 with c2:
-                                    st.multiselect("Municipios:", municipios_dummy, key=f"mun_{index}")
+                                    # Extraer los municipios reales de los estados seleccionados cruzando con tu base de datos
+                                    municipios_reales = []
+                                    for est in estados_seleccionados:
+                                        if est in reglas_region_dict:
+                                            muni_str = str(reglas_region_dict[est].get("Municipios", ""))
+                                            if muni_str and muni_str.lower() != "todos":
+                                                # Separamos por comas por si metiste varios en una celda
+                                                municipios_reales.extend([m.strip() for m in muni_str.split(",")])
+                                                
+                                    if not municipios_reales:
+                                        municipios_reales = ["Selecciona un Estado específico"]
+                                        
+                                    # Usamos set() para quitar duplicados
+                                    st.multiselect("Municipios:", sorted(list(set(municipios_reales))), key=f"mun_{index}")
                                     st.text_input("Prioridad / Instrucción extra:", key=f"notas_{index}", placeholder="Ej. Atender folios rezagados...")
                         
                         if st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True):
@@ -759,30 +821,40 @@ if menu == "🗺️ Distribución":
                             st.session_state[f'dados_{region_sel}'] = nueva_dist
                             
                             # 2. Empujar cambios a la pestaña 'Personal' (Batch Update Anti-DDoS)
+                            # 2. Empujar cambios a la pestaña 'Distribuir_Modulos' (Guardado Transaccional)
                             try:
-                                hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                                matriz_cruda = hoja_personal.get_all_values()
+                                hoja_dist = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribuir_Modulos")
+                                df_historico = cargar_distribuciones()
+                                fecha_str = str(st.session_state.fecha_dist)
                                 
-                                if len(matriz_cruda) > 0:
-                                    cabeceras = [str(c).strip() for c in matriz_cruda[0]]
-                                    idx_nom = cabeceras.index('Nombre')
-                                    idx_mod = cabeceras.index('Módulo')
+                                # Limpiamos los datos previos de ESTA fecha y ESTA región para evitar duplicados
+                                if not df_historico.empty:
+                                    df_filtrado = df_historico[~((df_historico['Fecha'] == fecha_str) & (df_historico['Región'] == region_sel))]
+                                else:
+                                    df_filtrado = pd.DataFrame(columns=["Fecha", "Región", "Nombre", "Módulo", "Estado", "Municipios", "Instrucciones"])
                                     
-                                    # Actualizamos la matriz localmente
-                                    for num_fila, fila in enumerate(matriz_cruda):
-                                        if num_fila == 0: continue
-                                        if len(fila) > idx_nom and fila[idx_nom] in nueva_dist:
-                                            # Rellenamos celdas vacías si la fila está incompleta
-                                            while len(fila) <= idx_mod: fila.append("")
-                                            fila[idx_mod] = nueva_dist[fila[idx_nom]]
+                                # Armamos el dataframe con lo de hoy
+                                nuevas_filas = []
+                                for nom, info in datos_completos.items():
+                                    nuevas_filas.append({
+                                        "Fecha": fecha_str, "Región": region_sel, "Nombre": nom, 
+                                        "Módulo": info["mod"], "Estado": info["est"], "Municipios": info["mun"], "Instrucciones": info["ins"]
+                                    })
                                     
-                                    # Empujamos toda la tabla de regreso en un solo golpe
-                                    hoja_personal.update(values=matriz_cruda, range_name="A1")
-                                    st.success("✅ ¡Distribución guardada oficialmente en la base de datos!")
+                                # Unimos la historia vieja con la info nueva y empujamos
+                                df_final = pd.concat([df_filtrado, pd.DataFrame(nuevas_filas)], ignore_index=True)
+                                df_final = df_final.fillna("") # Blindaje anti-nulos de Pandas
+                                
+                                matriz_guardar = [df_final.columns.tolist()] + df_final.astype(str).values.tolist()
+                                hoja_dist.clear()
+                                hoja_dist.update(values=matriz_guardar, range_name="A1")
+                                
+                                cargar_distribuciones.clear() # Limpiamos caché para forzar re-lectura
+                                st.success("✅ ¡Distribución guardada oficialmente en el histórico transaccional!")
                             except Exception as e:
-                                st.error(f"🚨 Error de conexión al guardar en Sheets: {e}")
+                                st.error(f"🚨 Error al guardar en Sheets: {e}")
 
-                            st.rerun() # Reiniciamos para que la tabla y el mensaje lean los nuevos cambios
+                            st.rerun()
                             
 elif menu == "💍 Anillo de Poder":
     st.title("💍 Anillo de Poder")
