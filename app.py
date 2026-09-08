@@ -250,6 +250,7 @@ with st.sidebar:
     opciones_menu = []
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Distribución" in modulos_user:
         opciones_menu.append("🗺️ Distribución")
+        opciones_menu.append("📍 Mi Región")
         
     # NUEVO MÓDULO: Mi Equipo (Visible para Coordis, Admins y Completo)
     if nivel_user in ["Completo", "Admin", "Coordinador"] or "Todos" in modulos_user or "Equipo" in modulos_user:
@@ -466,12 +467,27 @@ if menu == "🗺️ Distribución":
                                     st.markdown(html_balance, unsafe_allow_html=True)
                     except:
                         pass
-                
-                # CRÍTICO: Agregamos la pestaña de Modalidad al inicio
-                # CRÍTICO: Reordenamos las pestañas. Streamlit las dibujará en este exacto orden de izquierda a derecha.
+                        
                 tab_dados, tab_lotes, tab_manual, tab_modalidad = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno", "🏢 Modalidad"])
                 
-                estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
+                # --- LECTURA DE REGLAS DE REGIÓN ---
+                reglas_region_dict = {} 
+                try:
+                    hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
+                    datos_reglas = hoja_reglas.get_all_values()
+                    if len(datos_reglas) > 1:
+                        for fila in datos_reglas[1:]:
+                            if len(fila) >= 5 and str(fila[0]).strip() == region_sel:
+                                # Clave: Estado, Valor: Info
+                                reglas_region_dict[str(fila[1]).strip()] = {"Municipios": fila[2], "Etiqueta": fila[3], "Anotaciones": fila[4]}
+                except Exception: pass
+                
+                # Reordenamos: Focalizados van primero
+                estados_base = estados_por_region.get(region_sel, [])
+                estados_focalizados = [e for e in estados_base if reglas_region_dict.get(e, {}).get("Etiqueta") == "Focalizado"]
+                estados_resto = [e for e in estados_base if e not in estados_focalizados]
+                
+                estados_disponibles = ["Barrido"] + estados_focalizados + estados_resto
                 modulos_operativos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH", "Apoyo"]
                 municipios_dummy = ["Capital", "Zona Norte", "Zona Sur", "Focalizado A", "Focalizado B"]
                 
@@ -715,13 +731,23 @@ if menu == "🗺️ Distribución":
                                     idx_mod = modulos_operativos.index(modulo_actual) if modulo_actual in modulos_operativos else 0
                                     st.selectbox("Módulo:", modulos_operativos, index=idx_mod, key=f"mod_{index}")
                                     
-                                    # Si viene de dados, forzamos a "Barrido", si no, leemos la BD (por hacer)
-                                    estado_actual = "Barrido" if nombre in dict_dados else "Barrido" 
-                                    idx_est = estados_disponibles.index(estado_actual) if estado_actual in estados_disponibles else 0
-                                    st.selectbox("Estado:", estados_disponibles, index=idx_est, key=f"est_{index}")
+                                    estados_seleccionados = st.multiselect("Estado(s):", estados_disponibles, default=["Barrido"], key=f"est_{index}")
+                                    
+                                    # Pintamos las alertas en tiempo real
+                                    for est_sel in estados_seleccionados:
+                                        if est_sel in reglas_region_dict:
+                                            etq = reglas_region_dict[est_sel]['Etiqueta']
+                                            nota = reglas_region_dict[est_sel]['Anotaciones']
+                                            if etq == "No tocar":
+                                                st.error(f"🚨 {est_sel} es 'No tocar'. ¿Seguro que quieres asignarlo? Razón: {nota}")
+                                            elif etq == "Sospecha de gestoría":
+                                                st.warning(f"⚠️ {est_sel}: Sospecha de gestoría. Precaución.")
+                                            elif etq == "Focalizado":
+                                                st.success(f"🎯 {est_sel} es Focalizado. Nota: {nota}")
+                                                
                                 with c2:
                                     st.multiselect("Municipios:", municipios_dummy, key=f"mun_{index}")
-                                    st.text_input("Prioridad / Notas:", key=f"notas_{index}", placeholder="Ej. Prioridad 1, contactar a...")
+                                    st.text_input("Prioridad / Instrucción extra:", key=f"notas_{index}", placeholder="Ej. Atender folios rezagados...")
                         
                         if st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True):
                             # 1. Recolectar lo que se movió a mano y guardarlo en memoria
@@ -924,6 +950,50 @@ elif menu == "👥 Mi Equipo":
                                 st.error(f"🚨 Error al guardar en Sheets: {e}")
                         else:
                             st.error("Debes seleccionar al menos a un verificador.")
+
+elif menu == "📍 Mi Región":
+    st.title("📍 Configuración de Mi Región")
+    st.markdown("Define particularidades operativas para estados y municipios (Focalizados, No tocar, etc).")
+    
+    region_sel = st.selectbox("Selecciona tu Región:", opciones_regiones_limpias)
+    estados_posibles = estados_por_region.get(region_sel, [])
+    
+    st.subheader("➕ Agregar Nueva Regla")
+    with st.form("form_regla_region", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            estado_regla = st.selectbox("Estado *", estados_posibles)
+            muni_regla = st.multiselect("Municipios", municipios_dummy, help="Déjalo vacío para aplicar a todo el estado.")
+        with col2:
+            etiqueta_regla = st.selectbox("Etiqueta *", ["Focalizado", "No tocar", "Sospecha de gestoría", "IA"])
+            notas_regla = st.text_input("Anotaciones")
+            
+        if st.form_submit_button("Guardar Regla", type="primary", use_container_width=True):
+            try:
+                hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
+                muni_str = ", ".join(muni_regla) if muni_regla else "Todos"
+                hoja_reglas.append_row([region_sel, estado_regla, muni_str, etiqueta_regla, notas_regla])
+                st.success("✅ Regla agregada correctamente a la base de datos.")
+                st.rerun()
+            except gspread.exceptions.WorksheetNotFound:
+                st.error("🚨 CRÍTICO: No existe la pestaña 'Reglas_Region' en tu Google Sheet. ¡Créala con los encabezados: Región, Estado, Municipios, Etiqueta, Anotaciones!")
+            except Exception as e:
+                st.error(f"🚨 Error de conexión: {e}")
+
+    st.divider()
+    st.subheader("📋 Reglas Activas")
+    try:
+        hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
+        datos_reglas = hoja_reglas.get_all_values()
+        if len(datos_reglas) > 1:
+            df_reglas = pd.DataFrame(datos_reglas[1:], columns=datos_reglas[0])
+            df_reglas_region = df_reglas[df_reglas['Región'] == region_sel]
+            st.dataframe(df_reglas_region, hide_index=True, use_container_width=True)
+            st.caption("💡 Para borrar o editar una regla existente, modifícala directamente en tu Google Sheets por ahora.")
+        else:
+            st.info("No hay reglas registradas aún.")
+    except Exception:
+        st.info("Crea la pestaña 'Reglas_Region' en tu Google Sheet para ver la tabla aquí.")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
