@@ -467,12 +467,81 @@ if menu == "🗺️ Distribución":
                     except:
                         pass
                 
-                tab_dados, tab_lotes, tab_manual = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno"])
+                # CRÍTICO: Agregamos la pestaña de Modalidad al inicio
+                tab_modalidad, tab_dados, tab_lotes, tab_manual = st.tabs(["🏢 Modalidad", "🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno"])
                 
                 estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
                 modulos_operativos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH", "Apoyo"]
                 municipios_dummy = ["Capital", "Zona Norte", "Zona Sur", "Focalizado A", "Focalizado B"]
                 
+                with tab_modalidad:
+                    st.markdown("### 🏢 Planeación de Modalidad (Oficina vs Home Office)")
+                    st.caption("Por defecto, todo el personal está en Home Office (🏠). Asigna quiénes asistirán a la oficina (🏢).")
+                    
+                    col_m1, col_m2 = st.columns([1, 2])
+                    with col_m1:
+                        lugares_ofi = st.number_input("Lugares en oficina:", min_value=0, value=5, help="Capacidad máxima de tu región en sede.")
+                    with col_m2:
+                        rango_fechas = st.date_input("Selecciona fecha o rango a planear:", value=(st.session_state.fecha_dist, st.session_state.fecha_dist))
+                        
+                    if len(rango_fechas) == 2:
+                        fecha_ini, fecha_fin = rango_fechas
+                        dias_rango = [fecha_ini + datetime.timedelta(days=x) for x in range((fecha_fin-fecha_ini).days + 1)]
+                        
+                        nombres_region = df_region['Nombre'].tolist()
+                        
+                        # Mostramos el estado actual cruzando las fechas seleccionadas
+                        resumen_modalidad = []
+                        for nombre in nombres_region:
+                            dias_ofi = []
+                            for d in dias_rango:
+                                str_d = str(d)
+                                est_dia = estrategias_bd.get(str_d, {})
+                                if nombre in est_dia.get('modalidad', []):
+                                    dias_ofi.append(d.strftime('%d/%m'))
+                            
+                            if len(dias_ofi) == 0:
+                                estado = "🏠 Home Office"
+                                fechas_str = "-"
+                            elif len(dias_ofi) == len(dias_rango):
+                                estado = "🏢 Oficina"
+                                fechas_str = "Todos los días seleccionados"
+                            else:
+                                estado = "🏢🏠 Mixto"
+                                fechas_str = ", ".join(dias_ofi)
+                                
+                            resumen_modalidad.append({"Verificador": nombre, "Modalidad": estado, "Días en Oficina": fechas_str})
+                        
+                        st.dataframe(pd.DataFrame(resumen_modalidad), hide_index=True, use_container_width=True)
+                        
+                        st.divider()
+                        st.markdown(f"**Asignar para el rango seleccionado ({len(dias_rango)} días):**")
+                        van_a_oficina = st.multiselect("Selecciona quiénes ASISTIRÁN a la oficina:", nombres_region)
+                        
+                        if len(van_a_oficina) > lugares_ofi:
+                            st.error(f"🚨 ¡Límite excedido! Seleccionaste a {len(van_a_oficina)} personas, pero solo tienes {lugares_ofi} lugares configurados.")
+                        else:
+                            if st.button("💾 Guardar Modalidad en la Nube", type="primary", use_container_width=True):
+                                try:
+                                    hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
+                                    
+                                    # Actualizamos el JSON día por día
+                                    for d in dias_rango:
+                                        str_d = str(d)
+                                        if str_d not in estrategias_bd:
+                                            estrategias_bd[str_d] = {}
+                                        estrategias_bd[str_d]['modalidad'] = van_a_oficina
+                                        
+                                    hoja_est.update_acell('A1', 'Estrategias_JSON')
+                                    hoja_est.update_acell('B1', json.dumps(estrategias_bd))
+                                    leer_estrategias_nube.clear() # Limpiamos caché
+                                    st.success(f"✅ ¡Modalidad guardada correctamente para los {len(dias_rango)} días seleccionados!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"🚨 Error al guardar modalidad en Sheets: {e}")
+                    elif len(rango_fechas) == 1:
+                        st.info("Selecciona la fecha de fin (haz clic de nuevo en el calendario) para confirmar el rango.")
+
                 with tab_dados:
                     st.caption("Tira los dados para aplicar la estrategia administrativa del día de forma aleatoria.")
                     st.markdown('<div class="mobile-card border-tinto">', unsafe_allow_html=True)
@@ -717,7 +786,7 @@ elif menu == "💍 Anillo de Poder":
 
 elif menu == "👥 Mi Equipo":
     st.title("👥 Gestión de Mi Equipo")
-    st.markdown("Registra justificaciones, define la modalidad de trabajo y las fortalezas operativas de tus verificadores.")
+    st.markdown("Registra justificaciones y define las fortalezas y debilidades operativas de tus verificadores.")
     
     if df_global.empty:
         st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
@@ -732,19 +801,58 @@ elif menu == "👥 Mi Equipo":
             if 'Observaciones' not in df_global.columns: df_global['Observaciones'] = ""
             if 'Módulo Estrella' not in df_global.columns: df_global['Módulo Estrella'] = ""
             if 'Módulo a Evitar' not in df_global.columns: df_global['Módulo a Evitar'] = ""
-            if 'Modalidad' not in df_global.columns: df_global['Modalidad'] = ""
             
             # Limpiamos las opciones para quitar Vacaciones y Apoyo
-            opciones_habilidades = [""] + [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
-            opciones_modalidad = ["", "🏠 Home Office", "🏢 Oficina"]
+            opciones_habilidades = [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
             
-            # --- SECCIÓN 1: EDICIÓN INDIVIDUAL MANUAL ---
+            # --- SECCIÓN 1: EDICIÓN EN LOTE ---
+            st.markdown("### ⚡ Asignación en Lote")
+            st.caption("Aplica observaciones o habilidades a varias personas al mismo tiempo.")
+            
+            with st.form("form_lote_equipo", clear_on_submit=True):
+                nombres_equipo = df_equipo['Nombre'].tolist()
+                seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
+                
+                col_l1, col_l2 = st.columns(2)
+                with col_l1:
+                    lote_obs = st.text_input("📝 Justificación / Observación General:")
+                with col_l2:
+                    lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades)
+                    lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades)
+                    
+                if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
+                    if seleccionados:
+                        # Empate defensivo con la base global
+                        df_global.set_index('Nombre', inplace=True)
+                        for persona in seleccionados:
+                            if lote_obs: df_global.at[persona, 'Observaciones'] = lote_obs
+                            if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
+                            if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
+                        df_global.reset_index(inplace=True)
+                        
+                        try:
+                            hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+                            df_global_str = df_global.fillna("").astype(str)
+                            matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
+                            hoja_personal.clear()
+                            hoja_personal.update(values=matriz_cruda, range_name="A1")
+                            cargar_personal.clear()
+                            st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"🚨 Error al guardar en Sheets: {e}")
+                    else:
+                        st.error("Debes seleccionar al menos a un verificador.")
+
+            st.divider()
+            
+            # --- SECCIÓN 2: EDICIÓN INDIVIDUAL MANUAL ---
             st.markdown("### ✍️ Edición Individual")
-            st.caption("Ajustes rápidos uno a uno. Selecciona las opciones de las listas para evitar errores de escritura.")
+            st.caption("Ajustes rápidos uno a uno.")
             
-            # Recargamos la vista por si hubo cambios
+            # Recargamos la vista por si hubo cambios en lote
             df_equipo_actualizado = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
-            columnas_vista = ['Nombre', 'Modalidad', 'Módulo Estrella', 'Módulo a Evitar', 'Observaciones']
+            columnas_vista = ['Nombre', 'Módulo Estrella', 'Módulo a Evitar', 'Observaciones']
             
             st.markdown('<div class="mobile-card border-verde">', unsafe_allow_html=True)
             df_editado = st.data_editor(
@@ -753,9 +861,8 @@ elif menu == "👥 Mi Equipo":
                 hide_index=True,
                 column_config={
                     "Nombre": st.column_config.TextColumn("Verificador", disabled=True),
-                    "Modalidad": st.column_config.SelectboxColumn("Modalidad 📍", options=opciones_modalidad),
-                    "Módulo Estrella": st.column_config.SelectboxColumn("Módulo Estrella ⭐", options=opciones_habilidades),
-                    "Módulo a Evitar": st.column_config.SelectboxColumn("Módulo a Evitar ⚠️", options=opciones_habilidades),
+                    "Módulo Estrella": st.column_config.TextColumn("Módulo Estrella ⭐"),
+                    "Módulo a Evitar": st.column_config.TextColumn("Módulo a Evitar ⚠️"),
                     "Observaciones": st.column_config.TextColumn("Justificaciones / Notas 📝")
                 }
             )
@@ -778,48 +885,6 @@ elif menu == "👥 Mi Equipo":
                 except Exception as e:
                     st.error(f"🚨 Error al guardar en Sheets: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
-
-            st.divider()
-
-            # --- SECCIÓN 2: EDICIÓN EN LOTE (OCULTA EN EXPANDER) ---
-            with st.expander("⚡ Asignación en Lote (Múltiples verificadores)"):
-                st.caption("Aplica la misma justificación, modalidad o habilidades a varias personas de un solo golpe.")
-                
-                with st.form("form_lote_equipo", clear_on_submit=True):
-                    nombres_equipo = df_equipo['Nombre'].tolist()
-                    seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
-                    
-                    col_l1, col_l2 = st.columns(2)
-                    with col_l1:
-                        lote_modalidad = st.selectbox("📍 Modalidad de Trabajo:", ["(Sin cambios)"] + opciones_modalidad[1:])
-                        lote_obs = st.text_input("📝 Justificación / Observación General:")
-                    with col_l2:
-                        lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades[1:])
-                        lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades[1:])
-                        
-                    if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
-                        if seleccionados:
-                            df_global.set_index('Nombre', inplace=True)
-                            for persona in seleccionados:
-                                if lote_obs: df_global.at[persona, 'Observaciones'] = lote_obs
-                                if lote_modalidad != "(Sin cambios)": df_global.at[persona, 'Modalidad'] = lote_modalidad
-                                if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
-                                if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
-                            df_global.reset_index(inplace=True)
-                            
-                            try:
-                                hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                                df_global_str = df_global.fillna("").astype(str)
-                                matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
-                                hoja_personal.clear()
-                                hoja_personal.update(values=matriz_cruda, range_name="A1")
-                                cargar_personal.clear()
-                                st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"🚨 Error al guardar en Sheets: {e}")
-                        else:
-                            st.error("Debes seleccionar al menos a un verificador.")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
