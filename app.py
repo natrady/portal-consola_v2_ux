@@ -717,69 +717,104 @@ elif menu == "💍 Anillo de Poder":
 
 elif menu == "👥 Mi Equipo":
     st.title("👥 Gestión de Mi Equipo")
-    st.markdown("Registra justificaciones (faltas, incidencias) y define el **Módulo Estrella ⭐** de tus verificadores para los Dados Estratégicos.")
+    st.markdown("Registra justificaciones y define las fortalezas y debilidades operativas de tus verificadores.")
     
     if df_global.empty:
         st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
     else:
         region_sel = st.selectbox("📍 Selecciona tu Región:", opciones_regiones_limpias)
-        
-        # Filtramos solo a los verificadores de esa región
         df_equipo = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
         
         if df_equipo.empty:
             st.info(f"No hay verificadores registrados en la región {region_sel}.")
         else:
-            # Blindaje: Si las columnas no existen en el Sheets, las creamos al vuelo en el DataFrame
-            if 'Observaciones' not in df_equipo.columns: df_equipo['Observaciones'] = ""
-            if 'Módulo Estrella' not in df_equipo.columns: df_equipo['Módulo Estrella'] = "RE"
+            # Blindaje estructural: Crear columnas en el df maestro si no existen
+            if 'Observaciones' not in df_global.columns: df_global['Observaciones'] = ""
+            if 'Módulo Estrella' not in df_global.columns: df_global['Módulo Estrella'] = ""
+            if 'Módulo a Evitar' not in df_global.columns: df_global['Módulo a Evitar'] = ""
             
-            # Seleccionamos solo lo que queremos que el Coordi vea y edite
-            columnas_vista = ['Nombre', 'Módulo Estrella', 'Observaciones']
-            df_mostrar = df_equipo[columnas_vista]
+            # Limpiamos las opciones para quitar Vacaciones y Apoyo
+            opciones_habilidades = [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
+            
+            # --- SECCIÓN 1: EDICIÓN EN LOTE ---
+            st.markdown("### ⚡ Asignación en Lote")
+            st.caption("Aplica observaciones o habilidades a varias personas al mismo tiempo.")
+            
+            with st.form("form_lote_equipo", clear_on_submit=True):
+                nombres_equipo = df_equipo['Nombre'].tolist()
+                seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
+                
+                col_l1, col_l2 = st.columns(2)
+                with col_l1:
+                    lote_obs = st.text_input("📝 Justificación / Observación General:")
+                with col_l2:
+                    lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades)
+                    lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades)
+                    
+                if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
+                    if seleccionados:
+                        # Empate defensivo con la base global
+                        df_global.set_index('Nombre', inplace=True)
+                        for persona in seleccionados:
+                            if lote_obs: df_global.at[persona, 'Observaciones'] = lote_obs
+                            if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
+                            if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
+                        df_global.reset_index(inplace=True)
+                        
+                        try:
+                            hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+                            df_global_str = df_global.fillna("").astype(str)
+                            matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
+                            hoja_personal.clear()
+                            hoja_personal.update(values=matriz_cruda, range_name="A1")
+                            cargar_personal.clear()
+                            st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"🚨 Error al guardar en Sheets: {e}")
+                    else:
+                        st.error("Debes seleccionar al menos a un verificador.")
+
+            st.divider()
+            
+            # --- SECCIÓN 2: EDICIÓN INDIVIDUAL MANUAL ---
+            st.markdown("### ✍️ Edición Individual")
+            st.caption("Ajustes rápidos manuales. Si pones varios módulos, sepáralos por comas.")
+            
+            # Recargamos la vista por si hubo cambios en lote
+            df_equipo_actualizado = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
+            columnas_vista = ['Nombre', 'Módulo Estrella', 'Módulo a Evitar', 'Observaciones']
             
             st.markdown('<div class="mobile-card border-verde">', unsafe_allow_html=True)
             df_editado = st.data_editor(
-                df_mostrar,
+                df_equipo_actualizado[columnas_vista],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "Nombre": st.column_config.TextColumn("Verificador", disabled=True),
-                    "Módulo Estrella": st.column_config.SelectboxColumn("Módulo Estrella ⭐", options=opciones_modulos),
+                    "Módulo Estrella": st.column_config.TextColumn("Módulo Estrella ⭐"),
+                    "Módulo a Evitar": st.column_config.TextColumn("Módulo a Evitar ⚠️"),
                     "Observaciones": st.column_config.TextColumn("Justificaciones / Notas 📝")
                 }
             )
             
-            if st.button("💾 Guardar Observaciones y Módulos", type="primary", use_container_width=True):
+            if st.button("💾 Guardar Edición Individual", type="secondary", use_container_width=True):
                 try:
-                    # 1. Empatamos los cambios del editor con el DataFrame global usando el Nombre como llave maestra
                     df_global.set_index('Nombre', inplace=True)
                     df_editado.set_index('Nombre', inplace=True)
-                    
-                    # Blindaje: Crear las columnas globales si no existían
-                    if 'Observaciones' not in df_global.columns: df_global['Observaciones'] = ""
-                    if 'Módulo Estrella' not in df_global.columns: df_global['Módulo Estrella'] = "RE"
-                    
-                    # Sobrescribimos mágicamente solo las filas que el Coordi tocó
                     df_global.update(df_editado)
                     df_global.reset_index(inplace=True)
                     
-                    # Limpieza de nulos (NaN) para que JSON no colapse al subirlo
-                    df_global = df_global.fillna("")
-                    
-                    # 2. Subimos TODO a Google Sheets de un solo golpe
                     hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                    matriz_cruda = [df_global.columns.tolist()] + df_global.values.tolist()
-                    
+                    df_global_str = df_global.fillna("").astype(str)
+                    matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
                     hoja_personal.clear()
                     hoja_personal.update(values=matriz_cruda, range_name="A1")
-                    
-                    cargar_personal.clear() # Matamos caché para obligar a leer lo nuevo
-                    st.success("✅ ¡Datos del equipo actualizados en la base maestra!")
+                    cargar_personal.clear()
+                    st.success("✅ ¡Ediciones manuales guardadas exitosamente!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"🚨 Error al guardar en Sheets: {e}")
-            
             st.markdown('</div>', unsafe_allow_html=True)
 
 elif menu == "📊 Monitoreo de Equipo":
