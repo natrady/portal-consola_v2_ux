@@ -27,9 +27,9 @@ st.set_page_config(page_title="Portal Consola", page_icon="💻", layout="wide")
 
 st.markdown("""
     <style>
-    /* Ocultar menú de GitHub/Streamlit sin matar el botón de la barra lateral */
+    /* Ocultar menú derecho (GitHub/Deploy) sin matar el botón lateral */
     [data-testid="stToolbar"] {display: none;}
-    .viewerBadge_container {display: none;}
+    .stAppDeployButton {display: none;}
     
     .stApp { background-color: #f1f2f2; }
     h1, h2, h3 { color: #161a1d; }
@@ -458,13 +458,15 @@ if menu == "🗺️ Distribución":
                 
                 df_dist_hoy = df_todas_dist[(df_todas_dist.get('Fecha') == fecha_str) & (df_todas_dist.get('Región') == region_sel)]
                 
-                # UX: Botón siempre disponible para clonar ayer, si es que hubo datos ayer
+                # UX: Botón siempre visible, pero deshabilitado si no hay histórico de ayer
+                df_dist_ayer = pd.DataFrame()
                 if not df_todas_dist.empty:
                     df_dist_ayer = df_todas_dist[(df_todas_dist.get('Fecha') == fecha_ayer_str) & (df_todas_dist.get('Región') == region_sel)]
-                    if not df_dist_ayer.empty:
-                        if st.button("📋 Distribuir igual que ayer", use_container_width=True):
-                            for _, f_ayer in df_dist_ayer.iterrows():
-                                idx_persona = df_region.index[df_region['Nombre'] == f_ayer.get('Nombre')].tolist()
+                
+                btn_disabled = df_dist_ayer.empty
+                if st.button("📋 Distribuir igual que ayer", use_container_width=True, disabled=btn_disabled, help="Se habilitará cuando haya una distribución guardada del día anterior."):
+                    for _, f_ayer in df_dist_ayer.iterrows():
+                        idx_persona = df_region.index[df_region['Nombre'] == f_ayer.get('Nombre')].tolist()
                                 if idx_persona:
                                     idx_p = idx_persona[0]
                                     st.session_state[f"mod_{idx_p}"] = f_ayer.get('Módulo', 'RE')
