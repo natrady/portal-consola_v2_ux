@@ -23,13 +23,13 @@ SHEET_PERSONAL_ID = "1WJ2v0IMmfd55hui5YLmDDJ8Hp8tVrdIP-mtb1kdaJXw"
 # ==========================================
 # 1. CONFIGURACIÓN Y ESTILOS MÓVILES (UX/UI)
 # ==========================================
-st.set_page_config(page_title="Portal Consola", page_icon="💻", layout="wide")
+st.set_page_config(page_title="Portal Consola", page_icon="💻", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
-    /* Ocultar menú derecho (GitHub/Deploy) sin matar el botón lateral */
-    [data-testid="stToolbar"] {display: none;}
-    .stAppDeployButton {display: none;}
+    /* Blindaje: Forzamos el header visible y ocultamos solo los botones inútiles de Deploy */
+    header[data-testid="stHeader"] {display: block !important;}
+    .stAppDeployButton, [data-testid="stToolbarActions"], .viewerBadge_container {display: none !important;}
     
     .stApp { background-color: #f1f2f2; }
     h1, h2, h3 { color: #161a1d; }
