@@ -468,7 +468,8 @@ if menu == "🗺️ Distribución":
                         pass
                 
                 # CRÍTICO: Agregamos la pestaña de Modalidad al inicio
-                tab_modalidad, tab_dados, tab_lotes, tab_manual = st.tabs(["🏢 Modalidad", "🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno"])
+                # CRÍTICO: Reordenamos las pestañas. Streamlit las dibujará en este exacto orden de izquierda a derecha.
+                tab_dados, tab_lotes, tab_manual, tab_modalidad = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno", "🏢 Modalidad"])
                 
                 estados_disponibles = ["Barrido"] + estados_por_region.get(region_sel, [])
                 modulos_operativos = ["RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH", "Apoyo"]
@@ -524,8 +525,6 @@ if menu == "🗺️ Distribución":
                             if st.button("💾 Guardar Modalidad en la Nube", type="primary", use_container_width=True):
                                 try:
                                     hoja_est = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribución")
-                                    
-                                    # Actualizamos el JSON día por día
                                     for d in dias_rango:
                                         str_d = str(d)
                                         if str_d not in estrategias_bd:
@@ -534,7 +533,7 @@ if menu == "🗺️ Distribución":
                                         
                                     hoja_est.update_acell('A1', 'Estrategias_JSON')
                                     hoja_est.update_acell('B1', json.dumps(estrategias_bd))
-                                    leer_estrategias_nube.clear() # Limpiamos caché
+                                    leer_estrategias_nube.clear() 
                                     st.success(f"✅ ¡Modalidad guardada correctamente para los {len(dias_rango)} días seleccionados!")
                                     st.rerun()
                                 except Exception as e:
@@ -543,9 +542,9 @@ if menu == "🗺️ Distribución":
                         st.info("Selecciona la fecha de fin (haz clic de nuevo en el calendario) para confirmar el rango.")
 
                 with tab_dados:
-                    st.caption("Tira los dados para aplicar la estrategia administrativa del día de forma aleatoria.")
+                    st.caption("Tira los dados para aplicar la estrategia administrativa del día de forma Inteligente (considera estrellas y debilidades).")
                     st.markdown('<div class="mobile-card border-tinto">', unsafe_allow_html=True)
-                    if st.button("🎲 Tirar los Dados", type="primary", use_container_width=True):
+                    if st.button("🎲 Tirar los Dados Inteligentes", type="primary", use_container_width=True):
                         try:
                             estrategia = estrategias_bd.get(str(st.session_state.fecha_dist), {})
                                 
@@ -556,6 +555,7 @@ if menu == "🗺️ Distribución":
                                 personas = df_region['Nombre'].tolist()
                                 random.shuffle(personas)
                                 
+                                # 1. Armamos la bolsa de módulos disponibles según la estrategia
                                 cubeta = []
                                 for mod, qty in [("RE", estrategia.get("re", 0)), ("BB", estrategia.get("bb", 0)), 
                                                  ("CT", estrategia.get("ct", 0)), ("TCH", estrategia.get("tch", 0)), 
@@ -564,21 +564,58 @@ if menu == "🗺️ Distribución":
                                 
                                 if len(cubeta) < len(personas):
                                     cubeta.extend([estrategia.get("resto", "RE")] * (len(personas) - len(cubeta)))
-                                
                                 cubeta = cubeta[:len(personas)]
-                                random.shuffle(cubeta)
                                 
-                                asignaciones = {persona: cubeta[i] for i, persona in enumerate(personas)}
+                                # 2. Extraemos el talento y los miedos (Blindaje si están vacíos)
+                                if 'Módulo Estrella' not in df_region.columns: df_region['Módulo Estrella'] = ""
+                                if 'Módulo a Evitar' not in df_region.columns: df_region['Módulo a Evitar'] = ""
+                                
+                                estrellas = dict(zip(df_region['Nombre'], df_region['Módulo Estrella'].fillna('')))
+                                debilidades = dict(zip(df_region['Nombre'], df_region['Módulo a Evitar'].fillna('')))
+                                
+                                asignaciones = {}
+                                
+                                # 3. Primera vuelta: Asignar a los Expertos ⭐
+                                personas_sin_asignar = []
+                                for p in personas:
+                                    mod_estrellas_p = [m.strip() for m in str(estrellas.get(p, '')).split(',') if m.strip()]
+                                    asignado = False
+                                    random.shuffle(cubeta) # Mezclamos siempre
+                                    
+                                    for idx, mod_disponible in enumerate(cubeta):
+                                        if mod_disponible in mod_estrellas_p:
+                                            asignaciones[p] = cubeta.pop(idx)
+                                            asignado = True
+                                            break
+                                    if not asignado:
+                                        personas_sin_asignar.append(p)
+                                
+                                # 4. Segunda vuelta: Asignar evitando Debilidades ⚠️
+                                for p in personas_sin_asignar:
+                                    mod_evitar_p = [m.strip() for m in str(debilidades.get(p, '')).split(',') if m.strip()]
+                                    asignado = False
+                                    random.shuffle(cubeta)
+                                    
+                                    for idx, mod_disponible in enumerate(cubeta):
+                                        if mod_disponible not in mod_evitar_p:
+                                            asignaciones[p] = cubeta.pop(idx)
+                                            asignado = True
+                                            break
+                                            
+                                    # 5. Tercera vuelta: El trabajo llama (Si solo queda lo que odian, ni modo)
+                                    if not asignado and cubeta:
+                                        asignaciones[p] = cubeta.pop()
+                                
                                 st.session_state[f'dados_{region_sel}'] = asignaciones
                                 
-                                # CRÍTICO: Sobrescribir las llaves de los selectores para forzar actualización
+                                # CRÍTICO: Sobrescribir las llaves de los selectores manuales
                                 for idx, row_p in df_region.iterrows():
                                     nombre_p = row_p.get('Nombre')
                                     if f"mod_{idx}" in st.session_state:
                                         st.session_state[f"mod_{idx}"] = asignaciones.get(nombre_p, "RE")
                                 
-                                st.success("🎲 ¡Dados tirados exitosamente!")
-                                st.rerun() # Reiniciamos forzosamente para repintar el Uno a Uno
+                                st.success("🎲 ¡Dados Tirados! La estrategia fue optimizada con el talento del equipo.")
+                                st.rerun()
                         except Exception as e:
                             st.error(f"🚨 Error tirando los dados. ({e})")
                     
@@ -803,54 +840,13 @@ elif menu == "👥 Mi Equipo":
             if 'Módulo a Evitar' not in df_global.columns: df_global['Módulo a Evitar'] = ""
             
             # Limpiamos las opciones para quitar Vacaciones y Apoyo
-            opciones_habilidades = [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
+            opciones_habilidades = [""] + [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
             
-            # --- SECCIÓN 1: EDICIÓN EN LOTE ---
-            st.markdown("### ⚡ Asignación en Lote")
-            st.caption("Aplica observaciones o habilidades a varias personas al mismo tiempo.")
-            
-            with st.form("form_lote_equipo", clear_on_submit=True):
-                nombres_equipo = df_equipo['Nombre'].tolist()
-                seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
-                
-                col_l1, col_l2 = st.columns(2)
-                with col_l1:
-                    lote_obs = st.text_input("📝 Justificación / Observación General:")
-                with col_l2:
-                    lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades)
-                    lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades)
-                    
-                if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
-                    if seleccionados:
-                        # Empate defensivo con la base global
-                        df_global.set_index('Nombre', inplace=True)
-                        for persona in seleccionados:
-                            if lote_obs: df_global.at[persona, 'Observaciones'] = lote_obs
-                            if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
-                            if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
-                        df_global.reset_index(inplace=True)
-                        
-                        try:
-                            hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                            df_global_str = df_global.fillna("").astype(str)
-                            matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
-                            hoja_personal.clear()
-                            hoja_personal.update(values=matriz_cruda, range_name="A1")
-                            cargar_personal.clear()
-                            st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"🚨 Error al guardar en Sheets: {e}")
-                    else:
-                        st.error("Debes seleccionar al menos a un verificador.")
-
-            st.divider()
-            
-            # --- SECCIÓN 2: EDICIÓN INDIVIDUAL MANUAL ---
+            # --- SECCIÓN 1: EDICIÓN INDIVIDUAL MANUAL ---
             st.markdown("### ✍️ Edición Individual")
-            st.caption("Ajustes rápidos uno a uno.")
+            st.caption("Ajustes rápidos uno a uno. Usa las listas desplegables para mantener el orden de los datos.")
             
-            # Recargamos la vista por si hubo cambios en lote
+            # Recargamos la vista
             df_equipo_actualizado = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
             columnas_vista = ['Nombre', 'Módulo Estrella', 'Módulo a Evitar', 'Observaciones']
             
@@ -861,8 +857,8 @@ elif menu == "👥 Mi Equipo":
                 hide_index=True,
                 column_config={
                     "Nombre": st.column_config.TextColumn("Verificador", disabled=True),
-                    "Módulo Estrella": st.column_config.TextColumn("Módulo Estrella ⭐"),
-                    "Módulo a Evitar": st.column_config.TextColumn("Módulo a Evitar ⚠️"),
+                    "Módulo Estrella": st.column_config.SelectboxColumn("Módulo Estrella ⭐", options=opciones_habilidades),
+                    "Módulo a Evitar": st.column_config.SelectboxColumn("Módulo a Evitar ⚠️", options=opciones_habilidades),
                     "Observaciones": st.column_config.TextColumn("Justificaciones / Notas 📝")
                 }
             )
@@ -885,6 +881,49 @@ elif menu == "👥 Mi Equipo":
                 except Exception as e:
                     st.error(f"🚨 Error al guardar en Sheets: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
+
+            st.divider()
+
+            # --- SECCIÓN 2: ASIGNACIÓN EN LOTE (OCULTA EN EXPANDER) ---
+            with st.expander("⚡ Asignación en Lote (Múltiples verificadores)"):
+                st.caption("Aplica observaciones o habilidades a varias personas de un solo golpe.")
+                
+                with st.form("form_lote_equipo", clear_on_submit=True):
+                    nombres_equipo = df_equipo['Nombre'].tolist()
+                    seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
+                    
+                    col_l1, col_l2 = st.columns(2)
+                    with col_l1:
+                        lote_fecha = st.date_input("📅 Fecha de la justificación:")
+                        lote_obs = st.text_input("📝 Justificación / Observación General:")
+                    with col_l2:
+                        lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades[1:])
+                        lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades[1:])
+                        
+                    if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
+                        if seleccionados:
+                            df_global.set_index('Nombre', inplace=True)
+                            for persona in seleccionados:
+                                if lote_obs: 
+                                    nota_final = f"{lote_obs} ({lote_fecha.strftime('%d/%m')})"
+                                    df_global.at[persona, 'Observaciones'] = nota_final
+                                if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
+                                if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
+                            df_global.reset_index(inplace=True)
+                            
+                            try:
+                                hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+                                df_global_str = df_global.fillna("").astype(str)
+                                matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
+                                hoja_personal.clear()
+                                hoja_personal.update(values=matriz_cruda, range_name="A1")
+                                cargar_personal.clear()
+                                st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"🚨 Error al guardar en Sheets: {e}")
+                        else:
+                            st.error("Debes seleccionar al menos a un verificador.")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
