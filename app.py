@@ -467,16 +467,17 @@ if menu == "🗺️ Distribución":
                 if st.button("📋 Distribuir igual que ayer", use_container_width=True, disabled=btn_disabled, help="Se habilitará cuando haya una distribución guardada del día anterior."):
                     for _, f_ayer in df_dist_ayer.iterrows():
                         idx_persona = df_region.index[df_region['Nombre'] == f_ayer.get('Nombre')].tolist()
-                                if idx_persona:
-                                    idx_p = idx_persona[0]
-                                    st.session_state[f"mod_{idx_p}"] = f_ayer.get('Módulo', 'RE')
-                                    st.session_state[f"est_{idx_p}"] = [e.strip() for e in str(f_ayer.get('Estado', 'Barrido')).split(', ') if e.strip()]
-                                    st.session_state[f"mun_{idx_p}"] = [m.strip() for m in str(f_ayer.get('Municipios', '')).split(', ') if m.strip()]
-                                    st.session_state[f"notas_{idx_p}"] = f_ayer.get('Instrucciones', '')
+                        if idx_persona:
+                            idx_p = idx_persona[0]
+                            st.session_state[f"mod_{idx_p}"] = f_ayer.get('Módulo', 'RE')
+                            st.session_state[f"est_{idx_p}"] = [e.strip() for e in str(f_ayer.get('Estado', 'Barrido')).split(', ') if e.strip()]
+                            st.session_state[f"mun_{idx_p}"] = [m.strip() for m in str(f_ayer.get('Municipios', '')).split(', ') if m.strip()]
+                            st.session_state[f"notas_{idx_p}"] = f_ayer.get('Instrucciones', '')
                             
-                            st.session_state[f'dados_{region_sel}'] = dict(zip(df_dist_ayer['Nombre'], df_dist_ayer['Módulo']))
-                            st.success("✅ Datos de ayer cargados. Revisa la Vista Previa o la pestaña Uno a Uno antes de guardar.")
-                            st.rerun()
+                    # CRÍTICO: Esto va FUERA del for, alineado a la misma altura
+                    st.session_state[f'dados_{region_sel}'] = dict(zip(df_dist_ayer['Nombre'], df_dist_ayer['Módulo']))
+                    st.success("✅ Datos de ayer cargados. Revisa la Vista Previa o la pestaña Uno a Uno antes de guardar.")
+                    st.rerun()
 
                 dict_dados = st.session_state.get(f'dados_{region_sel}', {})
                 
@@ -601,9 +602,9 @@ if menu == "🗺️ Distribución":
                         st.info("Selecciona la fecha de fin (haz clic de nuevo en el calendario) para confirmar el rango.")
 
                 with tab_dados:
-                    st.caption("Tira los dados para aplicar la estrategia administrativa del día de forma Inteligente (considera estrellas y debilidades).")
+                    st.caption("Tira los dados para aplicar la estrategia administrativa del día, considerando estrellas y áreas de oportunidad.")
                     st.markdown('<div class="mobile-card border-tinto">', unsafe_allow_html=True)
-                    if st.button("🎲 Tirar los Dados Inteligentes", type="primary", use_container_width=True):
+                    if st.button("🎲 Tirar los Dados", type="primary", use_container_width=True):
                         try:
                             estrategia = estrategias_bd.get(str(st.session_state.fecha_dist), {})
                                 
