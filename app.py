@@ -250,6 +250,11 @@ with st.sidebar:
     opciones_menu = []
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Distribución" in modulos_user:
         opciones_menu.append("🗺️ Distribución")
+        
+    # NUEVO MÓDULO: Mi Equipo (Visible para Coordis, Admins y Completo)
+    if nivel_user in ["Completo", "Admin", "Coordinador"] or "Todos" in modulos_user or "Equipo" in modulos_user:
+        opciones_menu.append("👥 Mi Equipo")
+        
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Monitoreo" in modulos_user:
         opciones_menu.append("📊 Monitoreo de Equipo")
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Tablero" in modulos_user:
@@ -709,6 +714,73 @@ elif menu == "💍 Anillo de Poder":
             st.warning("⚠️ La pestaña 'Usuarios_App' está vacía. Agrega los encabezados primero.")
     except Exception as e:
         st.error(f"🚨 Error de conexión o formato en Usuarios_App: {e}")
+
+elif menu == "👥 Mi Equipo":
+    st.title("👥 Gestión de Mi Equipo")
+    st.markdown("Registra justificaciones (faltas, incidencias) y define el **Módulo Estrella ⭐** de tus verificadores para los Dados Estratégicos.")
+    
+    if df_global.empty:
+        st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
+    else:
+        region_sel = st.selectbox("📍 Selecciona tu Región:", opciones_regiones_limpias)
+        
+        # Filtramos solo a los verificadores de esa región
+        df_equipo = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
+        
+        if df_equipo.empty:
+            st.info(f"No hay verificadores registrados en la región {region_sel}.")
+        else:
+            # Blindaje: Si las columnas no existen en el Sheets, las creamos al vuelo en el DataFrame
+            if 'Observaciones' not in df_equipo.columns: df_equipo['Observaciones'] = ""
+            if 'Módulo Estrella' not in df_equipo.columns: df_equipo['Módulo Estrella'] = "RE"
+            
+            # Seleccionamos solo lo que queremos que el Coordi vea y edite
+            columnas_vista = ['Nombre', 'Módulo Estrella', 'Observaciones']
+            df_mostrar = df_equipo[columnas_vista]
+            
+            st.markdown('<div class="mobile-card border-verde">', unsafe_allow_html=True)
+            df_editado = st.data_editor(
+                df_mostrar,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Nombre": st.column_config.TextColumn("Verificador", disabled=True),
+                    "Módulo Estrella": st.column_config.SelectboxColumn("Módulo Estrella ⭐", options=opciones_modulos),
+                    "Observaciones": st.column_config.TextColumn("Justificaciones / Notas 📝")
+                }
+            )
+            
+            if st.button("💾 Guardar Observaciones y Módulos", type="primary", use_container_width=True):
+                try:
+                    # 1. Empatamos los cambios del editor con el DataFrame global usando el Nombre como llave maestra
+                    df_global.set_index('Nombre', inplace=True)
+                    df_editado.set_index('Nombre', inplace=True)
+                    
+                    # Blindaje: Crear las columnas globales si no existían
+                    if 'Observaciones' not in df_global.columns: df_global['Observaciones'] = ""
+                    if 'Módulo Estrella' not in df_global.columns: df_global['Módulo Estrella'] = "RE"
+                    
+                    # Sobrescribimos mágicamente solo las filas que el Coordi tocó
+                    df_global.update(df_editado)
+                    df_global.reset_index(inplace=True)
+                    
+                    # Limpieza de nulos (NaN) para que JSON no colapse al subirlo
+                    df_global = df_global.fillna("")
+                    
+                    # 2. Subimos TODO a Google Sheets de un solo golpe
+                    hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+                    matriz_cruda = [df_global.columns.tolist()] + df_global.values.tolist()
+                    
+                    hoja_personal.clear()
+                    hoja_personal.update(values=matriz_cruda, range_name="A1")
+                    
+                    cargar_personal.clear() # Matamos caché para obligar a leer lo nuevo
+                    st.success("✅ ¡Datos del equipo actualizados en la base maestra!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"🚨 Error al guardar en Sheets: {e}")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
