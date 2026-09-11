@@ -96,10 +96,11 @@ def cargar_personal():
         df = df.loc[:, df.columns != '']
         df = df.loc[:, ~df.columns.duplicated()]
         
-        # Blindaje 3: Limpiar Región (Ss -> SS)
+        # Blindaje 3: Limpiar Región y Estandarizar a Nomenclatura Corta
         if 'Región' in df.columns:
             df['Región'] = df['Región'].astype(str).str.strip()
-            df['Región'] = df['Región'].replace({'Ss': 'SS', 'Sur Sureste': 'SS'})
+            # Normalizamos todo usando el diccionario (evita duplicados como "Centro Oriente" y "CO")
+            df['Región'] = df['Región'].replace(mapa_regiones)
         
         # Mapeo de niveles a roles legibles
         mapa_niveles = {0: "Coordinador", 2: "Verificador", 3: "Administrativo"}
@@ -274,6 +275,8 @@ with st.sidebar:
         opciones_menu.append("📊 Monitoreo de Equipo")
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Tablero" in modulos_user:
         opciones_menu.append("📈 Tablero Gerencial")
+    if nivel_user in ["Completo", "Admin", "Coordinador", "Verificador"] or "Todos" in modulos_user or "Jornada" in modulos_user:
+        opciones_menu.append("⏱️ Mi Jornada")    
     if nivel_user == "Completo":
         opciones_menu.append("💍 Anillo de Poder")
         
@@ -1145,6 +1148,42 @@ elif menu == "🏘️ Mis Vecinos":
             st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
             st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
             st.markdown('</div>', unsafe_allow_html=True)
+elif menu == "⏱️ Mi Jornada":
+    st.title("⏱️ Mi Jornada")
+    st.markdown(f"¡Hola, **{nombre_mostrar}**! Aquí está tu plan de vuelo para hoy.")
+    
+    # 1. Leer distribución del día
+    df_dist = cargar_distribuciones()
+    fecha_hoy = str(datetime.datetime.now().date())
+    mi_dist = df_dist[(df_dist['Fecha'] == fecha_hoy) & (df_dist['Nombre'] == nombre_mostrar)]
+    
+    if mi_dist.empty:
+        st.info("Aún no tienes una distribución asignada para el día de hoy. Consulta con tu coordinador.")
+    else:
+        info_hoy = mi_dist.iloc[0]
+        
+        # Leemos modalidad (Oficina/Home Office) desde el JSON de estrategias
+        estrategias_bd, _ = leer_estrategias_nube()
+        est_hoy = estrategias_bd.get(fecha_hoy, {})
+        modalidad = "🏢 Oficina" if nombre_mostrar in est_hoy.get('modalidad', []) else "🏠 Home Office"
+        
+        st.markdown('<div class="mobile-card border-verde">', unsafe_allow_html=True)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Módulo Asignado", info_hoy.get('Módulo', 'N/A'))
+        c2.metric("Modalidad", modalidad)
+        c3.metric("Estado(s)", info_hoy.get('Estado', 'Barrido'))
+        
+        munis = str(info_hoy.get('Municipios', '')).strip()
+        notas = str(info_hoy.get('Instrucciones', '')).strip()
+        
+        if munis or notas:
+            st.divider()
+            if munis: st.markdown(f"**📍 Municipios focalizados:** {munis}")
+            if notas: st.markdown(f"**📝 Instrucciones de tu Coordi:** {notas}")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    st.subheader("Registro de Actividad")
+    st.warning("⚠️ Aquí construiremos los botones de Check-in, Check-out y Cambio de Actividad en el próximo paso.")            
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
     st.markdown("Revisa productividad, pausas y capturas de pantalla de tu equipo.")
