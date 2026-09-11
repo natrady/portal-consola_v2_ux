@@ -296,18 +296,22 @@ if menu == "🗺️ Distribución":
     if df_global.empty:
         st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
     else:
-        # 1. UX: Controles fijos inyectados en la barra lateral
-        with st.sidebar:
-            st.divider()
-            st.markdown("### 📌 Controles de Distribución")
-            if 'fecha_dist' not in st.session_state:
-                st.session_state.fecha_dist = datetime.datetime.now().date() + datetime.timedelta(days=1)
-                
+        # 1. UX: Controles interactivos en pantalla principal (Mobile-friendly)
+        if 'fecha_dist' not in st.session_state:
+            st.session_state.fecha_dist = datetime.datetime.now().date() + datetime.timedelta(days=1)
+            
+        col_enc1, col_enc2 = st.columns(2)
+        with col_enc1:
             fecha_sel = st.date_input("📅 Fecha a asignar:", value=st.session_state.fecha_dist)
             st.session_state.fecha_dist = fecha_sel
+        with col_enc2:
             region_sel = st.selectbox("📍 Región a trabajar:", opciones_regiones_limpias)
 
-        st.markdown(f"**📍 Trabajando en:** {region_sel} | **📅 Fecha:** {fecha_sel.strftime('%d/%m/%Y')}")
+        # Referencia fija en la barra lateral (solo lectura)
+        with st.sidebar:
+            st.divider()
+            st.info(f"📍 **Región:** {region_sel}\n\n📅 **Fecha:** {fecha_sel.strftime('%d/%m/%Y')}")
+
         st.divider()
 
         # 2. Recálculo dinámico de disponibilidad basado en la fecha elegida
@@ -483,36 +487,7 @@ if menu == "🗺️ Distribución":
                 
                 # CRÍTICO: Agregamos la pestaña de Modalidad al inicio
                 
-                # Validación matemática contra la estrategia global (Visible para todas las pestañas)
-                if dict_dados:
-                    try:
-                        estrategia = estrategias_bd.get(str(st.session_state.fecha_dist), {})
-                        
-                        if estrategia:
-                            fijos = sum([estrategia.get('re',0), estrategia.get('bb',0), estrategia.get('ct',0), estrategia.get('tch',0), estrategia.get('4ch',0)])
-                            libres = max(0, len(df_region) - fijos)
-                            ideal = {"RE": estrategia.get('re',0), "BB": estrategia.get('bb',0), "CT": estrategia.get('ct',0), "TCH": estrategia.get('tch',0), "Irregularidades 4CH": estrategia.get('4ch',0), "Actividad Especial": 0, "Apoyo": 0}
-                            resto_mod = estrategia.get('resto', 'RE')
-                            if resto_mod in ideal: ideal[resto_mod] += libres
-                                
-                            from collections import Counter
-                            real = Counter(dict_dados.values())
-                            
-                            if any(ideal[mod] != real.get(mod, 0) for mod in ideal.keys()):
-                                with st.expander("⚠️ La distribución actual descuadra con la estrategia administrativa (Clic para ver detalles)", expanded=True):
-                                    html_balance = "<table style='width:100%; font-size:14px; text-align:center; border-collapse: collapse; margin-bottom:15px;'><tr style='border-bottom: 2px solid #e9ecef; color:#161a1d;'><th>Módulo</th><th>Indicados</th><th>Asignados</th><th>Estatus</th></tr>"
-                                    for mod, meta in ideal.items():
-                                        if meta > 0 or real.get(mod, 0) > 0: 
-                                            asignados = real.get(mod, 0)
-                                            icono = "✅" if asignados == meta else "❌"
-                                            color = "#1e5b4f" if asignados == meta else "#9b2247"
-                                            html_balance += f"<tr style='color: {color}; border-bottom: 1px solid #f8f9fa;'><td><b>{mod}</b></td><td>{meta}</td><td>{asignados}</td><td>{icono}</td></tr>"
-                                    html_balance += "</table>"
-                                    st.markdown(html_balance, unsafe_allow_html=True)
-                    except:
-                        pass
-                        
-                tab_dados, tab_lotes, tab_manual, tab_modalidad = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno", "🏢 Modalidad"])
+               tab_dados, tab_lotes, tab_manual, tab_modalidad = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno", "🏢 Rol de Asistencia"])
                 
                 # --- LECTURA DE REGLAS DE REGIÓN ---
                 reglas_region_dict = {} 
@@ -522,7 +497,6 @@ if menu == "🗺️ Distribución":
                     if len(datos_reglas) > 1:
                         for fila in datos_reglas[1:]:
                             if len(fila) >= 5 and str(fila[0]).strip() == region_sel:
-                                # Clave: Estado, Valor: Info
                                 reglas_region_dict[str(fila[1]).strip()] = {"Municipios": fila[2], "Etiqueta": fila[3], "Anotaciones": fila[4]}
                 except Exception: pass
                 
@@ -536,8 +510,8 @@ if menu == "🗺️ Distribución":
                 municipios_dummy = ["Capital", "Zona Norte", "Zona Sur", "Focalizado A", "Focalizado B"]
                 
                 with tab_modalidad:
-                    st.markdown("### 🏢 Planeación de Modalidad (Oficina vs Home Office)")
-                    st.caption("Por defecto, todo el personal está en Home Office (🏠). Asigna quiénes asistirán a la oficina (🏢).")
+                    st.markdown("### 🏢 Planeación de Rol de Asistencia")
+                    st.caption("Por defecto, el personal está en Home Office (🏠). Asigna quiénes asistirán a la oficina (🏢).")
                     
                     col_m1, col_m2 = st.columns([1, 2])
                     with col_m1:
@@ -548,32 +522,7 @@ if menu == "🗺️ Distribución":
                     if len(rango_fechas) == 2:
                         fecha_ini, fecha_fin = rango_fechas
                         dias_rango = [fecha_ini + datetime.timedelta(days=x) for x in range((fecha_fin-fecha_ini).days + 1)]
-                        
                         nombres_region = df_region['Nombre'].tolist()
-                        
-                        # Mostramos el estado actual cruzando las fechas seleccionadas
-                        resumen_modalidad = []
-                        for nombre in nombres_region:
-                            dias_ofi = []
-                            for d in dias_rango:
-                                str_d = str(d)
-                                est_dia = estrategias_bd.get(str_d, {})
-                                if nombre in est_dia.get('modalidad', []):
-                                    dias_ofi.append(d.strftime('%d/%m'))
-                            
-                            if len(dias_ofi) == 0:
-                                estado = "🏠 Home Office"
-                                fechas_str = "-"
-                            elif len(dias_ofi) == len(dias_rango):
-                                estado = "🏢 Oficina"
-                                fechas_str = "Todos los días seleccionados"
-                            else:
-                                estado = "🏢🏠 Mixto"
-                                fechas_str = ", ".join(dias_ofi)
-                                
-                            resumen_modalidad.append({"Verificador": nombre, "Modalidad": estado, "Días en Oficina": fechas_str})
-                        
-                        st.dataframe(pd.DataFrame(resumen_modalidad), hide_index=True, use_container_width=True)
                         
                         st.divider()
                         st.markdown(f"**Asignar para el rango seleccionado ({len(dias_rango)} días):**")
@@ -598,6 +547,31 @@ if menu == "🗺️ Distribución":
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"🚨 Error al guardar modalidad en Sheets: {e}")
+
+                        st.divider()
+                        st.markdown("#### 📋 Vista Previa de Asistencia")
+                        resumen_modalidad = []
+                        for nombre in nombres_region:
+                            dias_ofi = []
+                            for d in dias_rango:
+                                str_d = str(d)
+                                est_dia = estrategias_bd.get(str_d, {})
+                                if nombre in est_dia.get('modalidad', []):
+                                    dias_ofi.append(d.strftime('%d/%m'))
+                            
+                            if len(dias_ofi) == 0:
+                                estado = "🏠 Home Office"
+                                fechas_str = "-"
+                            elif len(dias_ofi) == len(dias_rango):
+                                estado = "🏢 Oficina"
+                                fechas_str = "Todos los días"
+                            else:
+                                estado = "🏢🏠 Mixto"
+                                fechas_str = ", ".join(dias_ofi)
+                                
+                            resumen_modalidad.append({"Verificador": nombre, "Modalidad": estado, "Días en Oficina": fechas_str})
+                        
+                        st.dataframe(pd.DataFrame(resumen_modalidad), hide_index=True, use_container_width=True)
                     elif len(rango_fechas) == 1:
                         st.info("Selecciona la fecha de fin (haz clic de nuevo en el calendario) para confirmar el rango.")
 
@@ -927,7 +901,7 @@ elif menu == "💍 Anillo de Poder":
 
 elif menu == "👥 Mi Equipo":
     st.title("👥 Gestión de Mi Equipo")
-    st.markdown("Registra justificaciones y define las fortalezas y debilidades operativas de tus verificadores.")
+    st.markdown("Registra justificaciones y define las fortalezas y áreas de oportunidad de tus verificadores.")
     
     if df_global.empty:
         st.warning("⚠️ No se cargó la base de personal. Revisa la conexión a Google Sheets.")
@@ -946,11 +920,60 @@ elif menu == "👥 Mi Equipo":
             # Limpiamos las opciones para quitar Vacaciones y Apoyo
             opciones_habilidades = [""] + [m for m in opciones_modulos if m not in ["Vacaciones", "Apoyo", "Incapacidad"]]
             
-            # --- SECCIÓN 1: EDICIÓN INDIVIDUAL MANUAL ---
+            # --- SECCIÓN 1: ASIGNACIÓN EN LOTE (MOVIMOS ARRIBA) ---
+            with st.expander("⚡ Asignación en Lote (Múltiples verificadores)", expanded=False):
+                st.caption("Aplica observaciones o habilidades a varias personas de un solo golpe sin borrar lo que ya tienen.")
+                
+                with st.form("form_lote_equipo", clear_on_submit=True):
+                    nombres_equipo = df_equipo['Nombre'].tolist()
+                    seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
+                    
+                    col_l1, col_l2 = st.columns(2)
+                    with col_l1:
+                        lote_fecha = st.date_input("📅 Fecha de la justificación:")
+                        lote_obs = st.text_input("📝 Justificación / Observación General:")
+                    with col_l2:
+                        lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades[1:])
+                        lote_evitar = st.multiselect("⚠️ Áreas de Oportunidad (Poca exp.):", opciones_habilidades[1:])
+                        
+                    if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
+                        if seleccionados:
+                            df_global.set_index('Nombre', inplace=True)
+                            for persona in seleccionados:
+                                if lote_obs: 
+                                    nota_nueva = f"{lote_obs} ({lote_fecha.strftime('%d/%m')})"
+                                    nota_actual = df_global.at[persona, 'Observaciones']
+                                    
+                                    # Lógica defensiva para concatenar sin perder info previa
+                                    if pd.notna(nota_actual) and str(nota_actual).strip() != "":
+                                        df_global.at[persona, 'Observaciones'] = f"{str(nota_actual).strip()}, {nota_nueva}"
+                                    else:
+                                        df_global.at[persona, 'Observaciones'] = nota_nueva
+                                        
+                                if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
+                                if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
+                            df_global.reset_index(inplace=True)
+                            
+                            try:
+                                hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
+                                df_global_str = df_global.fillna("").astype(str)
+                                matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
+                                hoja_personal.clear()
+                                hoja_personal.update(values=matriz_cruda, range_name="A1")
+                                cargar_personal.clear()
+                                st.success(f"✅ ¡Datos agregados para {len(seleccionados)} personas!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"🚨 Error al guardar en Sheets: {e}")
+                        else:
+                            st.error("Debes seleccionar al menos a un verificador.")
+
+            st.divider()
+
+            # --- SECCIÓN 2: EDICIÓN INDIVIDUAL MANUAL (AHORA ABAJO) ---
             st.markdown("### ✍️ Edición Individual")
-            st.caption("Ajustes rápidos uno a uno. Usa las listas desplegables para mantener el orden de los datos.")
+            st.caption("Ajustes rápidos uno a uno. Aquí puedes borrar manualmente justificaciones antiguas si ya no aplican.")
             
-            # Recargamos la vista
             df_equipo_actualizado = df_global[(df_global['Región'] == region_sel) & (df_global['Rol'] == 'Verificador')].copy()
             columnas_vista = ['Nombre', 'Módulo Estrella', 'Módulo a Evitar', 'Observaciones']
             
@@ -962,7 +985,7 @@ elif menu == "👥 Mi Equipo":
                 column_config={
                     "Nombre": st.column_config.TextColumn("Verificador", disabled=True),
                     "Módulo Estrella": st.column_config.SelectboxColumn("Módulo Estrella ⭐", options=opciones_habilidades),
-                    "Módulo a Evitar": st.column_config.SelectboxColumn("Módulo a Evitar ⚠️", options=opciones_habilidades),
+                    "Módulo a Evitar": st.column_config.SelectboxColumn("Áreas de Oportunidad ⚠️", options=opciones_habilidades),
                     "Observaciones": st.column_config.TextColumn("Justificaciones / Notas 📝")
                 }
             )
@@ -985,50 +1008,6 @@ elif menu == "👥 Mi Equipo":
                 except Exception as e:
                     st.error(f"🚨 Error al guardar en Sheets: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
-
-            st.divider()
-
-            # --- SECCIÓN 2: ASIGNACIÓN EN LOTE (OCULTA EN EXPANDER) ---
-            with st.expander("⚡ Asignación en Lote (Múltiples verificadores)"):
-                st.caption("Aplica observaciones o habilidades a varias personas de un solo golpe.")
-                
-                with st.form("form_lote_equipo", clear_on_submit=True):
-                    nombres_equipo = df_equipo['Nombre'].tolist()
-                    seleccionados = st.multiselect("1️⃣ Selecciona a los verificadores:", nombres_equipo)
-                    
-                    col_l1, col_l2 = st.columns(2)
-                    with col_l1:
-                        lote_fecha = st.date_input("📅 Fecha de la justificación:")
-                        lote_obs = st.text_input("📝 Justificación / Observación General:")
-                    with col_l2:
-                        lote_estrellas = st.multiselect("⭐ Módulos Estrella (Expertos):", opciones_habilidades[1:])
-                        lote_evitar = st.multiselect("⚠️ Módulos a Evitar (Poca exp.):", opciones_habilidades[1:])
-                        
-                    if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
-                        if seleccionados:
-                            df_global.set_index('Nombre', inplace=True)
-                            for persona in seleccionados:
-                                if lote_obs: 
-                                    nota_final = f"{lote_obs} ({lote_fecha.strftime('%d/%m')})"
-                                    df_global.at[persona, 'Observaciones'] = nota_final
-                                if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
-                                if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
-                            df_global.reset_index(inplace=True)
-                            
-                            try:
-                                hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                                df_global_str = df_global.fillna("").astype(str)
-                                matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
-                                hoja_personal.clear()
-                                hoja_personal.update(values=matriz_cruda, range_name="A1")
-                                cargar_personal.clear()
-                                st.success(f"✅ ¡Datos actualizados para {len(seleccionados)} personas!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"🚨 Error al guardar en Sheets: {e}")
-                        else:
-                            st.error("Debes seleccionar al menos a un verificador.")
-
 elif menu == "📍 Mi Región":
     st.title("📍 Configuración de Mi Región")
     st.markdown("Define particularidades operativas para estados y municipios (Focalizados, No tocar, etc).")
@@ -1041,6 +1020,7 @@ elif menu == "📍 Mi Región":
         col1, col2 = st.columns(2)
         with col1:
             estado_regla = st.selectbox("Estado *", estados_posibles)
+            municipios_dummy = ["Capital", "Zona Norte", "Zona Sur", "Focalizado A", "Focalizado B"]
             muni_regla = st.multiselect("Municipios", municipios_dummy, help="Déjalo vacío para aplicar a todo el estado.")
         with col2:
             etiqueta_regla = st.selectbox("Etiqueta *", ["Focalizado", "No tocar", "Sospecha de gestoría", "IA"])
