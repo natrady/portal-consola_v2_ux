@@ -840,7 +840,7 @@ if menu == "🗺️ Distribución":
                                 st.session_state[f'dados_{region_sel}'] = nueva_dist
                                 
                                 cargar_distribuciones.clear() # Limpiamos caché para forzar re-lectura
-                                st.success("✅ ¡Distribución guardada oficialmente en el histórico transaccional!")
+                                st.markdown('<div style="background-color: #69b4a5; color: white; padding: 12px; border-radius: 8px; font-weight: bold; text-align: center; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">✅ ¡Listo! Tu distribución ha sido guardada.</div>', unsafe_allow_html=True)
                             except Exception as e:
                                 st.error(f"🚨 Error al guardar en Sheets: {e}")
 
