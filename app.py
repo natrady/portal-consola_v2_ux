@@ -765,13 +765,15 @@ if menu == "🗺️ Distribución":
                                     for est_sel in estados_seleccionados:
                                         if est_sel in reglas_region_dict:
                                             etq = reglas_region_dict[est_sel]['Etiqueta']
-                                            nota = reglas_region_dict[est_sel]['Anotaciones']
+                                            nota_raw = str(reglas_region_dict[est_sel]['Anotaciones']).strip()
+                                            nota = nota_raw if nota_raw else "Sin anotaciones"
+                                            
                                             if etq == "No tocar":
                                                 st.error(f"🚨 {est_sel} es 'No tocar'. ¿Seguro que quieres asignarlo? Razón: {nota}")
                                             elif etq == "Sospecha de gestoría":
-                                                st.warning(f"⚠️ {est_sel}: Sospecha de gestoría. Precaución.")
+                                                st.warning(f"⚠️ {est_sel}: Sospecha de gestoría. Razón: {nota}")
                                             elif etq == "Focalizado":
-                                                st.success(f"🎯 {est_sel} es Focalizado. Nota: {nota}")
+                                                st.success(f"🎯 {est_sel} es Focalizado. Razón: {nota}")
                                                 
                                 with c2:
                                     # Extraer los municipios reales de los estados seleccionados cruzando con tu base de datos
@@ -1012,45 +1014,78 @@ elif menu == "📍 Mi Región":
     st.markdown("Define particularidades operativas para estados y municipios (Focalizados, No tocar, etc).")
     
     region_sel = st.selectbox("Selecciona tu Región:", opciones_regiones_limpias)
-    estados_posibles = estados_por_region.get(region_sel, [])
     
-    st.subheader("➕ Agregar Nueva Regla")
-    with st.form("form_regla_region", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            estado_regla = st.selectbox("Estado *", estados_posibles)
-            municipios_dummy = ["Capital", "Zona Norte", "Zona Sur", "Focalizado A", "Focalizado B"]
-            muni_regla = st.multiselect("Municipios", municipios_dummy, help="Déjalo vacío para aplicar a todo el estado.")
-        with col2:
-            etiqueta_regla = st.selectbox("Etiqueta *", ["Focalizado", "No tocar", "Sospecha de gestoría", "IA"])
-            notas_regla = st.text_input("Anotaciones")
-            
-        if st.form_submit_button("Guardar Regla", type="primary", use_container_width=True):
-            try:
-                hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
-                muni_str = ", ".join(muni_regla) if muni_regla else "Todos"
-                hoja_reglas.append_row([region_sel, estado_regla, muni_str, etiqueta_regla, notas_regla])
-                st.success("✅ Regla agregada correctamente a la base de datos.")
-                st.rerun()
-            except gspread.exceptions.WorksheetNotFound:
-                st.error("🚨 CRÍTICO: No existe la pestaña 'Reglas_Region' en tu Google Sheet. ¡Créala con los encabezados: Región, Estado, Municipios, Etiqueta, Anotaciones!")
-            except Exception as e:
-                st.error(f"🚨 Error de conexión: {e}")
-
-    st.divider()
-    st.subheader("📋 Reglas Activas")
+    # 1. Cargar el catálogo completo desde la base de datos
     try:
         hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
         datos_reglas = hoja_reglas.get_all_values()
-        if len(datos_reglas) > 1:
-            df_reglas = pd.DataFrame(datos_reglas[1:], columns=datos_reglas[0])
-            df_reglas_region = df_reglas[df_reglas['Región'] == region_sel]
-            st.dataframe(df_reglas_region, hide_index=True, use_container_width=True)
-            st.caption("💡 Para borrar o editar una regla existente, modifícala directamente en tu Google Sheets por ahora.")
-        else:
-            st.info("No hay reglas registradas aún.")
-    except Exception:
-        st.info("Crea la pestaña 'Reglas_Region' en tu Google Sheet para ver la tabla aquí.")
+        df_reglas = pd.DataFrame(datos_reglas[1:], columns=datos_reglas[0]) if len(datos_reglas) > 1 else pd.DataFrame(columns=["Región", "Estado", "Municipios", "Etiqueta", "Anotaciones"])
+    except Exception as e:
+        st.error(f"🚨 Error cargando catálogo: {e}")
+        df_reglas = pd.DataFrame(columns=["Región", "Estado", "Municipios", "Etiqueta", "Anotaciones"])
+
+    # Extraer estados únicos reales según la región seleccionada
+    estados_posibles = sorted(df_reglas[df_reglas['Región'] == region_sel]['Estado'].unique().tolist())
+    if not estados_posibles: 
+        estados_posibles = estados_por_region.get(region_sel, [])
+    
+    st.subheader("➕ Agregar Nueva Regla")
+    # UX: Quitamos el st.form. Al usar st.columns, el selectbox "Estado" recarga la app y actualiza los "Municipios" al instante.
+    col1, col2 = st.columns(2)
+    with col1:
+        estado_regla = st.selectbox("Estado *", estados_posibles, key="add_est")
+        
+        # Dinamismo real: filtramos municipios según el estado seleccionado arriba
+        muni_reales = sorted(df_reglas[(df_reglas['Región'] == region_sel) & (df_reglas['Estado'] == estado_regla)]['Municipios'].unique().tolist())
+        muni_reales = [m for m in muni_reales if m.strip() and m.strip().lower() != "todos"]
+        
+        muni_regla = st.multiselect("Municipios", muni_reales, help="Déjalo vacío para aplicar a todo el estado.", key="add_mun")
+    with col2:
+        etiqueta_regla = st.selectbox("Etiqueta *", ["Focalizado", "No tocar", "Sospecha de gestoría", "IA"], key="add_etiq")
+        notas_regla = st.text_input("Anotaciones", key="add_notas")
+        
+    if st.button("🚀 Guardar Nueva Regla", type="primary", use_container_width=True):
+        try:
+            muni_str = ", ".join(muni_regla) if muni_regla else "Todos"
+            hoja_reglas.append_row([region_sel, estado_regla, muni_str, etiqueta_regla, notas_regla])
+            st.success("✅ Regla agregada correctamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"🚨 Error de conexión: {e}")
+
+    st.divider()
+    st.subheader("📋 Reglas Activas (Edición Rápida)")
+    st.caption("Edita las etiquetas o anotaciones directamente en la tabla y guarda. Borra la etiqueta para 'desactivar' la regla.")
+    
+    # Filtramos para mostrar SOLO filas que tienen etiqueta asignada, ignorando el catálogo vacío
+    df_activas = df_reglas[(df_reglas['Región'] == region_sel) & (df_reglas['Etiqueta'].str.strip() != "")].copy()
+    
+    if not df_activas.empty:
+        df_editado = st.data_editor(
+            df_activas,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Región": st.column_config.TextColumn("Región", disabled=True),
+                "Estado": st.column_config.TextColumn("Estado", disabled=True),
+                "Municipios": st.column_config.TextColumn("Municipios", disabled=True),
+                "Etiqueta": st.column_config.SelectboxColumn("Etiqueta", options=["", "Focalizado", "No tocar", "Sospecha de gestoría", "IA"]),
+                "Anotaciones": st.column_config.TextColumn("Anotaciones")
+            }
+        )
+        
+        if st.button("💾 Guardar Cambios en la Tabla", type="secondary", use_container_width=True):
+            try:
+                df_reglas.update(df_editado)
+                nuevos_valores = [df_reglas.columns.tolist()] + df_reglas.fillna("").astype(str).values.tolist()
+                hoja_reglas.clear()
+                hoja_reglas.update(values=nuevos_valores, range_name="A1")
+                st.success("✅ Reglas actualizadas en Sheets.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"🚨 Error al guardar: {e}")
+    else:
+        st.info("No hay reglas activas para tu región. Agrega una arriba.")
 
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
