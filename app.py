@@ -279,7 +279,7 @@ with st.sidebar:
     if nivel_user in ["Completo", "Admin", "Coordinador", "Verificador"] or "Todos" in modulos_user or "Jornada" in modulos_user:
         opciones_menu.append("⏱️ Mi Jornada")    
     if nivel_user == "Completo":
-        opciones_menu.append("💍 Anillo de Poder")
+        opciones_menu.append("🔐 Control de Accesos")
         
     if not opciones_menu:
         st.warning("⚠️ Tu usuario no tiene módulos asignados.")
@@ -851,9 +851,9 @@ if menu == "🗺️ Distribución":
 
                             st.rerun()
                             
-elif menu == "💍 Anillo de Poder":
-    st.title("💍 Anillo de Poder")
-    st.markdown("Control maestro de la lista de invitados y sus permisos.")
+elif menu == "🔐 Control de Accesos":
+    st.title("🔐 Control de Accesos")
+    st.markdown("Control maestro de la lista de usuarios y sus permisos en el sistema.")
     
     try:
         hoja_usuarios = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Usuarios_App")
@@ -877,7 +877,7 @@ elif menu == "💍 Anillo de Poder":
                     if nuevo_correo.strip() and nuevo_nombre.strip():
                         nueva_fila = [nuevo_correo.lower().strip(), nuevo_nombre.strip(), nuevo_nivel, nuevo_modulos, "Activo"]
                         hoja_usuarios.append_row(nueva_fila)
-                        st.success(f"✅ ¡{nuevo_nombre} ha sido agregado al Anillo de Poder!")
+                        st.success(f"✅ ¡{nuevo_nombre} ha sido agregado a Portal Consola!")
                         st.rerun()
                     else:
                         st.error("🚨 Faltan campos obligatorios (Correo y Nombre).")
