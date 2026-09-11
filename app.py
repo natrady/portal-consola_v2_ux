@@ -266,8 +266,9 @@ with st.sidebar:
         opciones_menu.append("🗺️ Distribución")
         opciones_menu.append("📍 Mi Región")
         opciones_menu.append("🏘️ Mis Vecinos")
-        
-    # NUEVO MÓDULO: Mi Equipo (Visible para Coordis, Admins y Completo)
+    if nivel_user in ["Completo", "Admin", "Coordinador", "Verificador"] or "Todos" in modulos_user or "Jornada" in modulos_user:
+        opciones_menu.append("🖥️ Mi espacio de trabajo")        
+    
     if nivel_user in ["Completo", "Admin", "Coordinador"] or "Todos" in modulos_user or "Equipo" in modulos_user:
         opciones_menu.append("👥 Mi Equipo")
         
@@ -1148,8 +1149,8 @@ elif menu == "🏘️ Mis Vecinos":
             st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
             st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
             st.markdown('</div>', unsafe_allow_html=True)
-elif menu == "⏱️ Mi Jornada":
-    st.title("⏱️ Mi Jornada")
+elif menu == "🖥️ Mi espacio de trabajo":
+    st.title("🖥️ Mi espacio de trabajo")
     st.markdown(f"¡Hola, **{nombre_mostrar}**! Aquí está tu plan de vuelo para hoy.")
     
     # 1. Leer distribución del día
@@ -1182,8 +1183,22 @@ elif menu == "⏱️ Mi Jornada":
             if notas: st.markdown(f"**📝 Instrucciones de tu Coordi:** {notas}")
         st.markdown('</div>', unsafe_allow_html=True)
         
-    st.subheader("Registro de Actividad")
-    st.warning("⚠️ Aquí construiremos los botones de Check-in, Check-out y Cambio de Actividad en el próximo paso.")            
+    st.divider()
+    st.subheader("📸 Registro de Actividad")
+    st.caption("Sube tu captura de pantalla para registrar tus tiempos. La hora se tomará del servidor automáticamente.")
+    
+    with st.form("form_registro_actividad", clear_on_submit=True):
+        tipo_registro = st.selectbox("Acción a registrar:", ["Entrada (Check-in)", "Cambio de Actividad", "Salida a comer", "Regreso de comer", "Salida (Check-out)"])
+        captura = st.file_uploader("Anexa tu captura de pantalla (JPG/PNG)", type=['jpg', 'jpeg', 'png'])
+        
+        if st.form_submit_button("Registrar Tiempo", type="primary", use_container_width=True):
+            if captura is not None:
+                # Aquí inyectaremos el código de Drive y Sheets en el siguiente paso
+                hora_actual = datetime.datetime.now().strftime('%H:%M:%S')
+                st.success(f"✅ ¡{tipo_registro} registrado en el sistema a las {hora_actual}!")
+                st.info("*(En construcción: En el siguiente paso conectaremos esto con Google Drive)*")
+            else:
+                st.error("🚨 Es obligatorio subir una captura de pantalla para registrar tu actividad.")        
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
     st.markdown("Revisa productividad, pausas y capturas de pantalla de tu equipo.")
