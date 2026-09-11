@@ -793,15 +793,20 @@ if menu == "🗺️ Distribución":
                                     st.text_input("Prioridad / Instrucción extra:", key=f"notas_{index}", placeholder="Ej. Atender folios rezagados...")
                         
                         if st.form_submit_button("☁️ Guardar Distribución Definitiva", type="primary", use_container_width=True):
-                            # 1. Recolectar lo que se movió a mano y guardarlo en memoria
-                            nueva_dist = {}
-                            for index, row in df_region.iterrows():
-                                nombre = row.get('Nombre', 'Sin Nombre')
-                                nueva_dist[nombre] = st.session_state[f"mod_{index}"]
+                            # 1. Recolectar lo que se movió a mano (o por lotes/dados)
+                            datos_completos = {}
+                            for idx_df, row_df in df_region.iterrows():
+                                nom = row_df.get('Nombre')
+                                est_val = ", ".join(st.session_state.get(f"est_{idx_df}", ["Barrido"]))
+                                mun_val = ", ".join(st.session_state.get(f"mun_{idx_df}", []))
+                                ins_val = st.session_state.get(f"notas_{idx_df}", "")
+                                datos_completos[nom] = {
+                                    "mod": st.session_state.get(f"mod_{idx_df}", "RE"), 
+                                    "est": est_val, 
+                                    "mun": mun_val, 
+                                    "ins": ins_val
+                                }
                             
-                            st.session_state[f'dados_{region_sel}'] = nueva_dist
-                            
-                            # 2. Empujar cambios a la pestaña 'Personal' (Batch Update Anti-DDoS)
                             # 2. Empujar cambios a la pestaña 'Distribuir_Modulos' (Guardado Transaccional)
                             try:
                                 hoja_dist = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Distribuir_Modulos")
@@ -824,11 +829,15 @@ if menu == "🗺️ Distribución":
                                     
                                 # Unimos la historia vieja con la info nueva y empujamos
                                 df_final = pd.concat([df_filtrado, pd.DataFrame(nuevas_filas)], ignore_index=True)
-                                df_final = df_final.fillna("") # Blindaje anti-nulos de Pandas
+                                df_final = df_final.fillna("")
                                 
                                 matriz_guardar = [df_final.columns.tolist()] + df_final.astype(str).values.tolist()
                                 hoja_dist.clear()
                                 hoja_dist.update(values=matriz_guardar, range_name="A1")
+                                
+                                # Sincronizamos la variable de los dados para la vista previa
+                                nueva_dist = {nom: info["mod"] for nom, info in datos_completos.items()}
+                                st.session_state[f'dados_{region_sel}'] = nueva_dist
                                 
                                 cargar_distribuciones.clear() # Limpiamos caché para forzar re-lectura
                                 st.success("✅ ¡Distribución guardada oficialmente en el histórico transaccional!")
