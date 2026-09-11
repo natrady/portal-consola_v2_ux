@@ -1184,21 +1184,30 @@ elif menu == "🖥️ Mi espacio de trabajo":
         st.markdown('</div>', unsafe_allow_html=True)
         
     st.divider()
-    st.subheader("📸 Registro de Actividad")
-    st.caption("Sube tu captura de pantalla para registrar tus tiempos. La hora se tomará del servidor automáticamente.")
+    st.subheader("⏱️ Registro de Actividad")
+    st.caption("Registra tu entrada, salidas y cambios. La hora se sella automáticamente con el servidor.")
     
     with st.form("form_registro_actividad", clear_on_submit=True):
-        tipo_registro = st.selectbox("Acción a registrar:", ["Entrada (Check-in)", "Cambio de Actividad", "Salida a comer", "Regreso de comer", "Salida (Check-out)"])
-        captura = st.file_uploader("Anexa tu captura de pantalla (JPG/PNG)", type=['jpg', 'jpeg', 'png'])
+        tipo_registro = st.selectbox("Acción a registrar:", [
+            "1. Inicio de Jornada",
+            "2. Cambio de Módulo / Actividad Especial",
+            "3. Reporte de Incidencia (Falla en Plataforma/Luz/Internet)",
+            "4. Inicio de Pausa (Comida/Sanitario)",
+            "5. Fin de Pausa",
+            "6. Fin de Jornada"
+        ])
+        
+        # Selector para saber en qué están trabajando (obligatorio para inicios/cambios)
+        modulos_validos = ["N/A", "RE", "BB", "CT", "TCH", "Actividad Especial", "Irregularidades 4CH"]
+        modulo_destino = st.selectbox("Módulo o Actividad (Aplica para Inicio o Cambio):", modulos_validos)
+        
+        # UX: Entregables en texto y justificaciones
+        comentarios = st.text_input("Detalles (URL de entregable AE, o descripción de la falla técnica):")
         
         if st.form_submit_button("Registrar Tiempo", type="primary", use_container_width=True):
-            if captura is not None:
-                # Aquí inyectaremos el código de Drive y Sheets en el siguiente paso
-                hora_actual = datetime.datetime.now().strftime('%H:%M:%S')
-                st.success(f"✅ ¡{tipo_registro} registrado en el sistema a las {hora_actual}!")
-                st.info("*(En construcción: En el siguiente paso conectaremos esto con Google Drive)*")
-            else:
-                st.error("🚨 Es obligatorio subir una captura de pantalla para registrar tu actividad.")        
+            hora_actual = datetime.datetime.now().strftime('%H:%M:%S')
+            st.success(f"✅ ¡{tipo_registro.split('. ')[1]} registrado exitosamente a las {hora_actual}!")
+            st.info("*(En el próximo paso conectaremos este botón a tu pestaña Registro_Tiempos en Sheets)*")
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
     st.markdown("Revisa productividad, pausas y capturas de pantalla de tu equipo.")
