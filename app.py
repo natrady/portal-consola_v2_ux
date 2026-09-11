@@ -486,8 +486,7 @@ if menu == "🗺️ Distribución":
                 dict_dados = st.session_state.get(f'dados_{region_sel}', {})
                 
                 # CRÍTICO: Agregamos la pestaña de Modalidad al inicio
-                
-               tab_dados, tab_lotes, tab_manual, tab_modalidad = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno", "🏢 Rol de Asistencia"])
+                tab_dados, tab_lotes, tab_manual, tab_modalidad = st.tabs(["🎲 Dados Estratégicos", "📦 Por Lotes", "✍️ Uno a Uno", "🏢 Rol de Asistencia"])
                 
                 # --- LECTURA DE REGLAS DE REGIÓN ---
                 reglas_region_dict = {} 
