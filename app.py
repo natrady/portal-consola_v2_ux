@@ -264,6 +264,7 @@ with st.sidebar:
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Distribución" in modulos_user:
         opciones_menu.append("🗺️ Distribución")
         opciones_menu.append("📍 Mi Región")
+        opciones_menu.append("🏘️ Mis Vecinos")
         
     # NUEVO MÓDULO: Mi Equipo (Visible para Coordis, Admins y Completo)
     if nivel_user in ["Completo", "Admin", "Coordinador"] or "Todos" in modulos_user or "Equipo" in modulos_user:
@@ -771,9 +772,9 @@ if menu == "🗺️ Distribución":
                                             if etq == "No tocar":
                                                 st.error(f"🚨 {est_sel} es 'No tocar'. ¿Seguro que quieres asignarlo? Razón: {nota}")
                                             elif etq == "Sospecha de gestoría":
-                                                st.warning(f"⚠️ {est_sel}: Sospecha de gestoría. Razón: {nota}")
-                                            elif etq == "Focalizado":
                                                 st.success(f"🎯 {est_sel} es Focalizado. Razón: {nota}")
+                                            elif etq == "Observaciones":
+                                                st.info(f"💡 {est_sel} (Observación): {nota}")
                                                 
                                 with c2:
                                     # Extraer los municipios reales de los estados seleccionados cruzando con tu base de datos
@@ -1050,7 +1051,7 @@ elif menu == "📍 Mi Región":
         
         muni_regla = st.multiselect("Municipios", muni_reales, help="Déjalo vacío para aplicar a todo el estado.", key="add_mun")
     with col2:
-        etiqueta_regla = st.selectbox("Etiqueta *", ["Focalizado", "No tocar", "Sospecha de gestoría", "IA"], key="add_etiq")
+        etiqueta_regla = st.selectbox("Etiqueta *", ["Focalizado", "No tocar", "Sospecha de gestoría", "IA", "Observaciones"], key="add_etiq")
         notas_regla = st.text_input("Anotaciones", key="add_notas")
         
     if st.button("🚀 Guardar Nueva Regla", type="primary", use_container_width=True):
@@ -1078,7 +1079,7 @@ elif menu == "📍 Mi Región":
                 "Región": st.column_config.TextColumn("Región", disabled=True),
                 "Estado": st.column_config.TextColumn("Estado", disabled=True),
                 "Municipios": st.column_config.TextColumn("Municipios", disabled=True),
-                "Etiqueta": st.column_config.SelectboxColumn("Etiqueta", options=["", "Focalizado", "No tocar", "Sospecha de gestoría", "IA"]),
+                "Etiqueta": st.column_config.SelectboxColumn("Etiqueta", options=["", "Focalizado", "No tocar", "Sospecha de gestoría", "IA", "Observaciones"]),
                 "Anotaciones": st.column_config.TextColumn("Anotaciones")
             }
         )
@@ -1095,7 +1096,55 @@ elif menu == "📍 Mi Región":
                 st.error(f"🚨 Error al guardar: {e}")
     else:
         st.info("No hay reglas activas para tu región. Agrega una arriba.")
+elif menu == "🏘️ Mis Vecinos":
+    st.title("🏘️ Mis Vecinos")
+    st.markdown("Consulta las observaciones y reglas activas de otras regiones antes de operar sus folios.")
+    
+    try:
+        hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
+        datos_reglas = hoja_reglas.get_all_values()
+        df_reglas = pd.DataFrame(datos_reglas[1:], columns=datos_reglas[0]) if len(datos_reglas) > 1 else pd.DataFrame()
+    except Exception as e:
+        st.error(f"🚨 Error cargando catálogo: {e}")
+        df_reglas = pd.DataFrame()
 
+    if df_reglas.empty:
+        st.info("No hay reglas ni observaciones registradas actualmente.")
+    else:
+        # Limpiar posibles NaNs por seguridad
+        df_reglas["Región"] = df_reglas.get("Región", pd.Series(dtype=str)).fillna("Sin Región")
+        df_reglas["Estado"] = df_reglas.get("Estado", pd.Series(dtype=str)).fillna("Sin Estado")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            lista_regiones = ["Todas"] + sorted(df_reglas["Región"].unique().tolist())
+            region_vecina = st.selectbox("📍 Filtrar por Región:", lista_regiones)
+
+        with col2:
+            if region_vecina == "Todas":
+                lista_estados = ["Todos"] + sorted(df_reglas["Estado"].unique().tolist())
+            else:
+                estados_filtrados = df_reglas[df_reglas["Región"] == region_vecina]["Estado"].unique().tolist()
+                lista_estados = ["Todos"] + sorted(estados_filtrados)
+                
+            estado_vecino = st.selectbox("🗺️ Filtrar por Estado:", lista_estados)
+
+        df_filtrado = df_reglas.copy()
+        # Filtramos para mostrar SOLO filas que tienen etiqueta asignada (limpiando basura)
+        if 'Etiqueta' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['Etiqueta'].str.strip() != ""]
+
+        if region_vecina != "Todas":
+            df_filtrado = df_filtrado[df_filtrado["Región"] == region_vecina]
+        if estado_vecino != "Todos":
+            df_filtrado = df_filtrado[df_filtrado["Estado"] == estado_vecino]
+
+        if df_filtrado.empty:
+            st.warning("No se encontraron observaciones para esta selección.")
+        else:
+            st.markdown('<div class="mobile-card border-dorado">', unsafe_allow_html=True)
+            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
     st.markdown("Revisa productividad, pausas y capturas de pantalla de tu equipo.")
