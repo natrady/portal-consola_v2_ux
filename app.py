@@ -1215,9 +1215,29 @@ elif menu == "🖥️ Mi espacio de trabajo":
             comentarios = st.text_input("Detalles (URL de entregable, motivo de permiso, etc):")
             
             if st.form_submit_button("Registrar Tiempo", type="primary", use_container_width=True):
+                # Extraer región desde df_global (cero fricción para el usuario)
+                region_usr = "Desconocida"
+                if not df_global.empty:
+                    filtro_usr = df_global[df_global['Nombre'] == nombre_mostrar]
+                    if not filtro_usr.empty:
+                        region_usr = filtro_usr['Región'].values[0]
+                
+                fecha_actual = datetime.datetime.now().strftime('%Y-%m-%d')
                 hora_actual = datetime.datetime.now().strftime('%H:%M:%S')
-                st.success(f"✅ ¡Registro guardado exitosamente a las {hora_actual}!")
-                st.info("*(En el próximo paso conectaremos este botón a tu pestaña Registro_Tiempos en Sheets)*")
+                
+                nueva_fila = [fecha_actual, hora_actual, nombre_mostrar, region_usr, tipo_registro, modulo_destino, comentarios]
+                
+                try:
+                    hoja_tiempos = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Registro_Tiempos")
+                    hoja_tiempos.append_row(nueva_fila)
+                    
+                    # Limpiamos el texto de la acción para que el mensaje se vea bonito (quita el "1. ", "2. ", etc.)
+                    nombre_accion = tipo_registro.split('. ')[1] if '. ' in tipo_registro else tipo_registro
+                    st.success(f"✅ ¡{nombre_accion} registrado exitosamente a las {hora_actual}!")
+                except gspread.exceptions.WorksheetNotFound:
+                    st.error("🚨 CRÍTICO: No existe la pestaña 'Registro_Tiempos' en Sheets.")
+                except Exception as e:
+                    st.error(f"🚨 Error de conexión al guardar: {e}")
         st.markdown('</div>', unsafe_allow_html=True)
 elif menu == "📊 Monitoreo de Equipo":
     st.title("📊 Monitoreo de Equipo")
