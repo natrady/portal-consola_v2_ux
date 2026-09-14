@@ -1221,9 +1221,10 @@ elif menu == "🖥️ Mi espacio de trabajo":
                     filtro_usr = df_global[df_global['Nombre'] == nombre_mostrar]
                     if not filtro_usr.empty:
                         region_usr = filtro_usr['Región'].values[0]
-                
-                fecha_actual = datetime.datetime.now().strftime('%Y-%m-%d')
-                hora_actual = datetime.datetime.now().strftime('%H:%M:%S')
+                # Ajuste de Zona Horaria (UTC-6 para Centro de México)
+                tz_mx = datetime.timezone(datetime.timedelta(hours=-6))
+                fecha_actual = datetime.datetime.now(tz_mx).strftime('%Y-%m-%d')
+                hora_actual = datetime.datetime.now(tz_mx).strftime('%H:%M:%S')
                 # Generación del Sello Criptográfico (Firma Digital)
                 import hashlib
                 # En producción, este secreto debe vivir en st.secrets, no en el código duro.
