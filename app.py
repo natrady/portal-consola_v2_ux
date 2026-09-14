@@ -1224,9 +1224,14 @@ elif menu == "🖥️ Mi espacio de trabajo":
                 
                 fecha_actual = datetime.datetime.now().strftime('%Y-%m-%d')
                 hora_actual = datetime.datetime.now().strftime('%H:%M:%S')
+                # Generación del Sello Criptográfico (Firma Digital)
+                import hashlib
+                # En producción, este secreto debe vivir en st.secrets, no en el código duro.
+                secreto_institucional = "PortalConsola_Auditoria_2026" 
+                cadena_base = f"{fecha_actual}|{hora_actual}|{nombre_mostrar}|{tipo_registro}|{secreto_institucional}"
+                firma_hash = hashlib.sha256(cadena_base.encode()).hexdigest()
                 
-                nueva_fila = [fecha_actual, hora_actual, nombre_mostrar, region_usr, tipo_registro, modulo_destino, comentarios]
-                
+                nueva_fila = [fecha_actual, hora_actual, nombre_mostrar, region_usr, tipo_registro, modulo_destino, comentarios, firma_hash]
                 try:
                     hoja_tiempos = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Registro_Tiempos")
                     hoja_tiempos.append_row(nueva_fila)
