@@ -262,22 +262,23 @@ with st.sidebar:
     
     # Construcción dinámica del menú según permisos (Programación defensiva)
     opciones_menu = []
+    if nivel_user in ["Completo", "Admin", "Coordinador", "Verificador"] or "Todos" in modulos_user or "Jornada" in modulos_user:
+        opciones_menu.append("🖥️ Mi espacio de trabajo")
+
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Distribución" in modulos_user:
         opciones_menu.append("🗺️ Distribución")
         opciones_menu.append("📍 Mi Región")
         opciones_menu.append("🏘️ Mis Vecinos")
-    if nivel_user in ["Completo", "Admin", "Coordinador", "Verificador"] or "Todos" in modulos_user or "Jornada" in modulos_user:
-        opciones_menu.append("🖥️ Mi espacio de trabajo")        
-    
+        
     if nivel_user in ["Completo", "Admin", "Coordinador"] or "Todos" in modulos_user or "Equipo" in modulos_user:
         opciones_menu.append("👥 Mi Equipo")
         
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Monitoreo" in modulos_user:
         opciones_menu.append("📊 Monitoreo de Equipo")
+        
     if nivel_user in ["Completo", "Admin"] or "Todos" in modulos_user or "Tablero" in modulos_user:
         opciones_menu.append("📈 Tablero Gerencial")
-    if nivel_user in ["Completo", "Admin", "Coordinador", "Verificador"] or "Todos" in modulos_user or "Jornada" in modulos_user:
-        opciones_menu.append("⏱️ Mi Jornada")    
+        
     if nivel_user == "Completo":
         opciones_menu.append("🔐 Control de Accesos")
         
@@ -1151,11 +1152,42 @@ elif menu == "🏘️ Mis Vecinos":
             st.markdown('</div>', unsafe_allow_html=True)
 elif menu == "🖥️ Mi espacio de trabajo":
     st.title("🖥️ Mi espacio de trabajo")
-    st.markdown(f"¡Hola, **{nombre_mostrar}**! Aquí está tu plan de vuelo para hoy.")
+    # --- 1. RECONOCIMIENTO Y BIENVENIDA ---
+    estrella_mod = ""
+    if not df_global.empty:
+        mi_info = df_global[df_global['Nombre'] == nombre_mostrar]
+        if not mi_info.empty:
+            estrella_mod = mi_info['Módulo Estrella'].values[0]
     
-    # 1. Leer distribución del día
+    if pd.notna(estrella_mod) and str(estrella_mod).strip() != "":
+        st.markdown(f"¡Hola, **{nombre_mostrar}**! 🌟 Tu coordinador ha destacado tu talento en: **{estrella_mod}**.")
+    else:
+        st.markdown(f"¡Hola, **{nombre_mostrar}**! Aquí está tu plan de vuelo.")
+        
+    st.divider()
+    
+    # --- 2. AGENDA HÍBRIDA (PRÓXIMOS 7 DÍAS) ---
+    st.subheader("📅 Tu Agenda Semanal")
+    st.caption("Planea tus días. Aquí puedes ver cuándo te toca asistir a oficina.")
+    estrategias_bd, _ = leer_estrategias_nube()
+    fecha_hoy_obj = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-6))).date()
+    
+    cols_agenda = st.columns(7)
+    for i, c in enumerate(cols_agenda):
+        dia_eval = fecha_hoy_obj + datetime.timedelta(days=i)
+        est_dia = estrategias_bd.get(str(dia_eval), {})
+        es_oficina = nombre_mostrar in est_dia.get('modalidad', [])
+        
+        label_dia = "Hoy" if i==0 else ("Mañana" if i==1 else dia_eval.strftime('%d/%m'))
+        icono = "🏢" if es_oficina else "🏠"
+        bg_color = "#e8f5e9" if es_oficina else "#f1f2f2"
+        border_color = "#1e5b4f" if es_oficina else "#e9ecef"
+        
+        c.markdown(f"<div style='background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 8px 2px; text-align: center; font-size: 13px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><b>{label_dia}</b><br><span style='font-size: 18px;'>{icono}</span></div>", unsafe_allow_html=True)
+        
+    # --- 3. DISTRIBUCIÓN DEL DÍA ---
     df_dist = cargar_distribuciones()
-    fecha_hoy = str(datetime.datetime.now().date())
+    fecha_hoy = str(fecha_hoy_obj)
     mi_dist = df_dist[(df_dist['Fecha'] == fecha_hoy) & (df_dist['Nombre'] == nombre_mostrar)]
     
     if mi_dist.empty:
@@ -1225,13 +1257,11 @@ elif menu == "🖥️ Mi espacio de trabajo":
                 tz_mx = datetime.timezone(datetime.timedelta(hours=-6))
                 fecha_actual = datetime.datetime.now(tz_mx).strftime('%Y-%m-%d')
                 hora_actual = datetime.datetime.now(tz_mx).strftime('%H:%M:%S')
-                # Generación del Sello Criptográfico (Firma Digital)
+                # Generación del Sello Criptográfico (Firma Digital con llave en st.secrets)
                 import hashlib
-                # En producción, este secreto debe vivir en st.secrets, no en el código duro.
-                secreto_institucional = "PortalConsola_Auditoria_2026" 
+                secreto_institucional = st.secrets.get("secreto_firma", "PortalConsola_Auditoria_2026")
                 cadena_base = f"{fecha_actual}|{hora_actual}|{nombre_mostrar}|{tipo_registro}|{secreto_institucional}"
                 firma_hash = hashlib.sha256(cadena_base.encode()).hexdigest()
-                
                 nueva_fila = [fecha_actual, hora_actual, nombre_mostrar, region_usr, tipo_registro, modulo_destino, comentarios, firma_hash]
                 try:
                     hoja_tiempos = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Registro_Tiempos")
