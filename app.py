@@ -501,7 +501,9 @@ if menu == "🗺️ Distribución":
                     datos_reglas = hoja_reglas.get_all_values()
                     if len(datos_reglas) > 1:
                         for fila in datos_reglas[1:]:
-                            if len(fila) >= 5 and str(fila[0]).strip() == region_sel:
+                            reg_raw = str(fila[0]).strip()
+                            reg_mapeada = mapa_regiones.get(reg_raw, reg_raw)
+                            if len(fila) >= 5 and reg_mapeada == region_sel:
                                 reglas_region_dict[str(fila[1]).strip()] = {"Municipios": fila[2], "Etiqueta": fila[3], "Anotaciones": fila[4]}
                 except Exception: pass
                 
@@ -750,7 +752,29 @@ if menu == "🗺️ Distribución":
 
                 with tab_manual:
                     st.caption("Ajusta detalles individuales. Los cambios de Lotes y Dados se reflejarán aquí antes de guardar.")
-                    
+                    # --- AUDITORÍA DE DISTRIBUCIÓN ---
+                    if est_guardada.get("fecha") == str(st.session_state.fecha_dist):
+                        conteo_actual = {"RE": 0, "BB": 0, "CT": 0, "TCH": 0, "Irregularidades 4CH": 0}
+                        for index, row in df_region.iterrows():
+                            nombre = row.get('Nombre', 'Sin Nombre')
+                            mod_asignado = st.session_state.get(f"mod_{index}", dict_dados.get(nombre, row.get('Módulo', 'RE')))
+                            if mod_asignado in conteo_actual:
+                                conteo_actual[mod_asignado] += 1
+                                
+                        df_auditoria = pd.DataFrame({
+                            "Módulo": ["RE", "BB", "CT", "TCH", "4CH"],
+                            "Tope Estrategia": [int(est_guardada.get('re', 0)), int(est_guardada.get('bb', 0)), int(est_guardada.get('ct', 0)), int(est_guardada.get('tch', 0)), int(est_guardada.get('4ch', 0))],
+                            "Asignados (Previa)": [conteo_actual["RE"], conteo_actual["BB"], conteo_actual["CT"], conteo_actual["TCH"], conteo_actual["Irregularidades 4CH"]]
+                        })
+                        
+                        descuadre = df_auditoria[df_auditoria['Tope Estrategia'] != df_auditoria['Asignados (Previa)']]
+                        if not descuadre.empty:
+                            st.warning("⚖️ **Alerta de Balance:** Tu distribución actual no cuadra con los topes de la estrategia. (Ojo: El módulo 'Resto' absorbe la diferencia y no sale aquí).")
+                            st.dataframe(descuadre, hide_index=True, use_container_width=True)
+                        else:
+                            st.success("✅ **¡Perfecto!** Los topes fijos de tu distribución cuadran con la estrategia administrativa.")
+                        st.divider()
+                        
                     # dict_dados ya lo leemos arriba, pero el form lo usa directo desde session_state
                     with st.form("form_distribucion"):
                         for index, row in df_region.iterrows():
@@ -1037,6 +1061,9 @@ elif menu == "📍 Mi Región":
         hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
         datos_reglas = hoja_reglas.get_all_values()
         df_reglas = pd.DataFrame(datos_reglas[1:], columns=datos_reglas[0]) if len(datos_reglas) > 1 else pd.DataFrame(columns=["Región", "Estado", "Municipios", "Etiqueta", "Anotaciones"])
+        # Normalizamos en caliente para que "Centro Oriente" se vuelva "CO"
+        if not df_reglas.empty and 'Región' in df_reglas.columns:
+            df_reglas['Región'] = df_reglas['Región'].astype(str).str.strip().replace(mapa_regiones)
     except Exception as e:
         st.error(f"🚨 Error cargando catálogo: {e}")
         df_reglas = pd.DataFrame(columns=["Región", "Estado", "Municipios", "Etiqueta", "Anotaciones"])
@@ -1111,6 +1138,9 @@ elif menu == "🏘️ Mis Vecinos":
         hoja_reglas = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Reglas_Region")
         datos_reglas = hoja_reglas.get_all_values()
         df_reglas = pd.DataFrame(datos_reglas[1:], columns=datos_reglas[0]) if len(datos_reglas) > 1 else pd.DataFrame()
+        # Normalizamos en caliente para que "Centro Oriente" se vuelva "CO"
+        if not df_reglas.empty and 'Región' in df_reglas.columns:
+            df_reglas['Región'] = df_reglas['Región'].astype(str).str.strip().replace(mapa_regiones)
     except Exception as e:
         st.error(f"🚨 Error cargando catálogo: {e}")
         df_reglas = pd.DataFrame()
