@@ -954,25 +954,26 @@ elif menu == "👥 Mi Equipo":
                         
                     if st.form_submit_button("🚀 Aplicar a seleccionados", type="primary", use_container_width=True):
                         if seleccionados:
-                            df_global.set_index('Nombre', inplace=True)
+                            df_temp = df_global.copy()
+                            df_temp.set_index('Nombre', inplace=True)
                             for persona in seleccionados:
                                 if lote_obs: 
                                     nota_nueva = f"{lote_obs} ({lote_fecha.strftime('%d/%m')})"
-                                    nota_actual = df_global.at[persona, 'Observaciones']
+                                    nota_actual = df_temp.at[persona, 'Observaciones']
                                     
                                     # Lógica defensiva para concatenar sin perder info previa
                                     if pd.notna(nota_actual) and str(nota_actual).strip() != "":
-                                        df_global.at[persona, 'Observaciones'] = f"{str(nota_actual).strip()}, {nota_nueva}"
+                                        df_temp.at[persona, 'Observaciones'] = f"{str(nota_actual).strip()}, {nota_nueva}"
                                     else:
-                                        df_global.at[persona, 'Observaciones'] = nota_nueva
+                                        df_temp.at[persona, 'Observaciones'] = nota_nueva
                                         
-                                if lote_estrellas: df_global.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
-                                if lote_evitar: df_global.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
-                            df_global.reset_index(inplace=True)
+                                if lote_estrellas: df_temp.at[persona, 'Módulo Estrella'] = ", ".join(lote_estrellas)
+                                if lote_evitar: df_temp.at[persona, 'Módulo a Evitar'] = ", ".join(lote_evitar)
+                            df_temp.reset_index(inplace=True)
                             
                             try:
                                 hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                                df_global_str = df_global.fillna("").astype(str)
+                                df_global_str = df_temp.fillna("").astype(str)
                                 matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
                                 hoja_personal.clear()
                                 hoja_personal.update(values=matriz_cruda, range_name="A1")
@@ -1008,13 +1009,14 @@ elif menu == "👥 Mi Equipo":
             
             if st.button("💾 Guardar Edición Individual", type="secondary", use_container_width=True):
                 try:
-                    df_global.set_index('Nombre', inplace=True)
-                    df_editado.set_index('Nombre', inplace=True)
-                    df_global.update(df_editado)
-                    df_global.reset_index(inplace=True)
+                    df_temp = df_global.copy()
+                    df_temp.set_index('Nombre', inplace=True)
+                    df_editado_idx = df_editado.copy().set_index('Nombre')
+                    df_temp.update(df_editado_idx)
+                    df_temp.reset_index(inplace=True)
                     
                     hoja_personal = gc.open_by_key(SHEET_PERSONAL_ID).worksheet("Personal")
-                    df_global_str = df_global.fillna("").astype(str)
+                    df_global_str = df_temp.fillna("").astype(str)
                     matriz_cruda = [df_global_str.columns.tolist()] + df_global_str.values.tolist()
                     hoja_personal.clear()
                     hoja_personal.update(values=matriz_cruda, range_name="A1")
@@ -1168,9 +1170,12 @@ elif menu == "🖥️ Mi espacio de trabajo":
     
     # --- 2. AGENDA HÍBRIDA (PRÓXIMOS 7 DÍAS) ---
     st.subheader("📅 Tu Agenda Semanal")
-    st.caption("Planea tus días. Aquí puedes ver cuándo te toca asistir a oficina.")
+    st.caption("Planea tus días. Aquí puedes ver cuándo te toca asistir a oficina o si es día inhábil.")
     estrategias_bd, _ = leer_estrategias_nube()
     fecha_hoy_obj = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-6))).date()
+    
+    # Calendario de feriados oficiales (puedes ir agregando más a esta lista)
+    feriados_oficiales = [datetime.date(2026, 9, 16), datetime.date(2026, 11, 16), datetime.date(2026, 12, 25)]
     
     cols_agenda = st.columns(7)
     for i, c in enumerate(cols_agenda):
@@ -1179,12 +1184,25 @@ elif menu == "🖥️ Mi espacio de trabajo":
         es_oficina = nombre_mostrar in est_dia.get('modalidad', [])
         
         label_dia = "Hoy" if i==0 else ("Mañana" if i==1 else dia_eval.strftime('%d/%m'))
-        icono = "🏢" if es_oficina else "🏠"
-        bg_color = "#e8f5e9" if es_oficina else "#f1f2f2"
-        border_color = "#1e5b4f" if es_oficina else "#e9ecef"
         
-        c.markdown(f"<div style='background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 8px 2px; text-align: center; font-size: 13px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><b>{label_dia}</b><br><span style='font-size: 18px;'>{icono}</span></div>", unsafe_allow_html=True)
+        es_fin_semana = dia_eval.weekday() >= 5 # 5=Sábado, 6=Domingo
+        es_feriado = dia_eval in feriados_oficiales
         
+        if es_feriado:
+            icono, bg_color, border_color, extra = "🏖️", "#f8d7da", "#f5c6cb", "<br><span style='font-size: 10px; color: #721c24;'>Feriado</span>"
+        elif es_fin_semana:
+            icono, bg_color, border_color, extra = "🛋️", "#e2e3e5", "#d6d8db", "<br><span style='font-size: 10px; color: #383d41;'>Fin de sem.</span>"
+        else:
+            icono = "🏢" if es_oficina else "🏠"
+            bg_color = "#e8f5e9" if es_oficina else "#f1f2f2"
+            border_color = "#1e5b4f" if es_oficina else "#e9ecef"
+            extra = ""
+            
+        # Excepción: Si los mandan a la oficina en feriado o fin de semana (Guardia)
+        if (es_feriado or es_fin_semana) and es_oficina:
+            icono, bg_color, border_color, extra = "🚨🏢", "#fff3cd", "#ffeeba", "<br><span style='font-size: 10px; color: #856404;'>Guardia</span>"
+        
+        c.markdown(f"<div style='background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 8px 2px; text-align: center; font-size: 13px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><b>{label_dia}</b><br><span style='font-size: 18px;'>{icono}</span>{extra}</div>", unsafe_allow_html=True)
     # --- 3. DISTRIBUCIÓN DEL DÍA ---
     df_dist = cargar_distribuciones()
     fecha_hoy = str(fecha_hoy_obj)
