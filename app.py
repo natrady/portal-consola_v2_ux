@@ -398,7 +398,11 @@ if menu == "🗺️ Distribución":
                     if q_4ch > 0 and "Irregularidades 4CH" in opciones_resto: opciones_resto.remove("Irregularidades 4CH")
                     
                     st.markdown(f"**El resto ({lugares_libres} asignaciones dinámicas):**")
-                    resto_a = st.selectbox("🎯 Los demás se irán a:", opciones_resto)
+                    # UX: Leer el valor guardado en el JSON para que el selector no se reinicie visualmente
+                    resto_guardado = est_hoy.get('resto', 'RE')
+                    idx_resto = opciones_resto.index(resto_guardado) if resto_guardado in opciones_resto else 0
+                    
+                    resto_a = st.selectbox("🎯 Los demás se irán a:", opciones_resto, index=idx_resto)
                     
                     if total_asignados > limite_minimo:
                         st.error(f"🚨 ¡Alto ahí! Asignaste {total_asignados} posiciones fijas, pero tu límite es {limite_minimo}. Reduce los números.")
@@ -649,11 +653,9 @@ if menu == "🗺️ Distribución":
                                 
                                 st.session_state[f'dados_{region_sel}'] = asignaciones
                                 
-                                # CRÍTICO: Sobrescribir las llaves de los selectores manuales
+                                # CRÍTICO: Forzamos la sobrescritura de las llaves en caché, existan o no los inputs
                                 for idx, row_p in df_region.iterrows():
-                                    nombre_p = row_p.get('Nombre')
-                                    if f"mod_{idx}" in st.session_state:
-                                        st.session_state[f"mod_{idx}"] = asignaciones.get(nombre_p, "RE")
+                                    st.session_state[f"mod_{idx}"] = asignaciones.get(row_p.get('Nombre'), "RE")
                                 
                                 st.success("🎲 ¡Dados Tirados! La estrategia fue optimizada con el talento del equipo.")
                                 st.rerun()
@@ -767,10 +769,15 @@ if menu == "🗺️ Distribución":
                             "Asignados (Previa)": [conteo_actual["RE"], conteo_actual["BB"], conteo_actual["CT"], conteo_actual["TCH"], conteo_actual["Irregularidades 4CH"]]
                         })
                         
-                        descuadre = df_auditoria[df_auditoria['Tope Estrategia'] != df_auditoria['Asignados (Previa)']]
+                        resto_mod = est_guardada.get("resto", "")
+                        # Excluimos el módulo 'Resto' de la alerta estricta
+                        descuadre = df_auditoria[(df_auditoria['Tope Estrategia'] != df_auditoria['Asignados (Previa)']) & (df_auditoria['Módulo'] != resto_mod)]
+                        
                         if not descuadre.empty:
-                            st.warning("⚖️ **Alerta de Balance:** Tu distribución actual no cuadra con los topes de la estrategia. (Ojo: El módulo 'Resto' absorbe la diferencia y no sale aquí).")
-                            st.dataframe(descuadre, hide_index=True, use_container_width=True)
+                            st.warning(f"⚖️ **Alerta de Balance:** Tu distribución actual no cuadra con los topes de la estrategia. (Nota: El módulo '{resto_mod}' absorbe el resto).")
+                            col_tabla, _ = st.columns([2, 1])
+                            with col_tabla:
+                                st.dataframe(descuadre, hide_index=True, use_container_width=False)
                         else:
                             st.success("✅ **¡Perfecto!** Los topes fijos de tu distribución cuadran con la estrategia administrativa.")
                         st.divider()
@@ -1200,36 +1207,48 @@ elif menu == "🖥️ Mi espacio de trabajo":
     
     # --- 2. AGENDA HÍBRIDA (PRÓXIMOS 7 DÍAS) ---
     st.subheader("📅 Tu Agenda Semanal")
-    st.caption("Planea tus días. Aquí puedes ver cuándo te toca asistir a oficina o si es día inhábil.")
+    st.caption("Planea tus días. Revisa tus guardias, vacaciones o días en oficina.")
     estrategias_bd, _ = leer_estrategias_nube()
     fecha_hoy_obj = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-6))).date()
     
-    # Calendario de feriados oficiales (puedes ir agregando más a esta lista)
     feriados_oficiales = [datetime.date(2026, 9, 16), datetime.date(2026, 11, 16), datetime.date(2026, 12, 25)]
+    
+    # Extraemos fechas de vacaciones de la persona
+    inicio_vac, fin_vac = None, None
+    if not df_global.empty:
+        mi_info = df_global[df_global['Nombre'] == nombre_mostrar]
+        if not mi_info.empty:
+            val_ini = mi_info['Inicio incidencia'].values[0]
+            val_fin = mi_info['Fin Incidencia'].values[0]
+            if pd.notna(val_ini): inicio_vac = val_ini
+            if pd.notna(val_fin): fin_vac = val_fin
     
     cols_agenda = st.columns(7)
     for i, c in enumerate(cols_agenda):
         dia_eval = fecha_hoy_obj + datetime.timedelta(days=i)
-        est_dia = estrategias_bd.get(str(dia_eval), {})
-        es_oficina = nombre_mostrar in est_dia.get('modalidad', [])
+        est_dia = estrategias_bd.get(str(dia_eval), None)
         
         label_dia = "Hoy" if i==0 else ("Mañana" if i==1 else dia_eval.strftime('%d/%m'))
-        
-        es_fin_semana = dia_eval.weekday() >= 5 # 5=Sábado, 6=Domingo
+        es_fin_semana = dia_eval.weekday() >= 5
         es_feriado = dia_eval in feriados_oficiales
+        en_vacaciones = (inicio_vac and fin_vac and inicio_vac <= dia_eval <= fin_vac)
         
-        if es_feriado:
+        if en_vacaciones:
+            icono, bg_color, border_color, extra = "🌴", "#d1ecf1", "#bee5eb", "<br><span style='font-size: 10px; color: #0c5460;'>Vacaciones</span>"
+        elif es_feriado:
             icono, bg_color, border_color, extra = "🏖️", "#f8d7da", "#f5c6cb", "<br><span style='font-size: 10px; color: #721c24;'>Feriado</span>"
         elif es_fin_semana:
             icono, bg_color, border_color, extra = "🛋️", "#e2e3e5", "#d6d8db", "<br><span style='font-size: 10px; color: #383d41;'>Fin de sem.</span>"
+        elif est_dia is None:
+            icono, bg_color, border_color, extra = "⏳", "#f8f9fa", "#dae0e5", "<br><span style='font-size: 10px; color: #6c757d;'>Sin rol</span>"
         else:
+            es_oficina = nombre_mostrar in est_dia.get('modalidad', [])
             icono = "🏢" if es_oficina else "🏠"
             bg_color = "#e8f5e9" if es_oficina else "#f1f2f2"
             border_color = "#1e5b4f" if es_oficina else "#e9ecef"
             extra = ""
             
-        # Excepción: Si los mandan a la oficina en feriado o fin de semana (Guardia)
-        if (es_feriado or es_fin_semana) and es_oficina:
+        if (es_feriado or es_fin_semana) and est_dia and nombre_mostrar in est_dia.get('modalidad', []):
             icono, bg_color, border_color, extra = "🚨🏢", "#fff3cd", "#ffeeba", "<br><span style='font-size: 10px; color: #856404;'>Guardia</span>"
         
         c.markdown(f"<div style='background-color: {bg_color}; border: 1px solid {border_color}; border-radius: 8px; padding: 8px 2px; text-align: center; font-size: 13px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><b>{label_dia}</b><br><span style='font-size: 18px;'>{icono}</span>{extra}</div>", unsafe_allow_html=True)
